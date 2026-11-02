@@ -6,14 +6,13 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Request
 from sqlalchemy import text
 
-from adscontrol.energy import energy_by_zone
+from adscontrol.energy import CHARGER_MIN_W, energy_by_zone
 from adscontrol.rates import LOCAL, all_in_cents, rate_for, rate_period
 from adscontrol.zones import list_zones, zone_power
 
 STALE_AFTER_S = 30
 # The charger has no sensor of its own, so it is inferred: a large load on the incoming lines
 # that no zone explains, held long enough that it is not an A/C or motor starting up.
-CHARGER_MIN_W = 1500.0
 CHARGER_WINDOW = timedelta(seconds=35)
 CHARGER_MIN_SAMPLES = 3
 

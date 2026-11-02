@@ -108,6 +108,17 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outl
 button.link { background: none; border-color: transparent; color: var(--muted); padding-inline: 4px; }
 button.danger { color: var(--orange); }
 .add-task { max-width: 760px; margin-bottom: 12px; }
+.range { margin: 0 0 14px; }
+button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
+.table-scroll { overflow-x: auto; margin-top: 14px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; }
+td, th { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td button.link { min-height: 0; padding: 0; color: var(--sage); text-decoration: underline; }
+.share { display: inline-block; width: 90px; height: 6px; margin-right: 8px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.share i { display: block; height: 100%; background: var(--orange); }
+.zone-panel { margin-top: 14px; }
+.chart { margin-top: 10px; }
 .toast {
   position: sticky;
   top: 8px;
