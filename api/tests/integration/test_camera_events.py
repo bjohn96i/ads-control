@@ -340,3 +340,24 @@ async def test_nothing_starts_a_stream_on_its_own(engine, session, clean, tmp_pa
         await c.get("/api/cameras")
         await c.get("/api/live")
     assert sdm.streams == []
+
+
+def test_unrecognised_event_types_are_logged_by_name(caplog):
+    message = {
+        "timestamp": "2026-11-02T12:00:00Z",
+        "resourceUpdate": {
+            "name": "enterprises/p/devices/cam1",
+            "events": {"sdm.devices.events.CameraVehicle.Vehicle": {"eventId": "e1"}},
+        },
+    }
+    assert parse_events(message) == []
+    assert "sdm.devices.events.CameraVehicle.Vehicle" in caplog.text
+
+
+async def test_failed_image_is_logged_where_the_server_log_can_see_it(
+    engine, session, clean, tmp_path, caplog
+):
+    sdm = FakeSdm([("a1", payload())], image=NestError("expired"))
+    service = await _ready(engine, sdm, tmp_path)
+    await service.poll()
+    assert any(r.levelname == "WARNING" and "no image" in r.getMessage() for r in caplog.records)

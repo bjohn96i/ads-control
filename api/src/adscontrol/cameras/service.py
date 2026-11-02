@@ -45,9 +45,13 @@ def parse_events(payload: dict) -> list[CameraEvent]:
         device_id = update["name"].rsplit("/", 1)[-1]
     except (ValueError, KeyError, AttributeError):
         return []
+    events = update.get("events") or {}
+    ignored = sorted(set(events) - set(_EVENT_TYPES))
+    if ignored:
+        log.warning("ignored camera event types: %s", ignored)
     return [
         CameraEvent(device_id, _EVENT_TYPES[name], body["eventId"], occurred)
-        for name, body in (update.get("events") or {}).items()
+        for name, body in events.items()
         if name in _EVENT_TYPES and "eventId" in body
     ]
 
@@ -99,7 +103,7 @@ class CameraService:
         try:
             image = await self._sdm.fetch_event_image(event.device_id, event.event_id)
         except NestError as exc:
-            log.info("no image for a %s event: %s", event.type, exc)
+            log.warning("no image for a %s event: %s", event.type, exc)
             return
         self._image_dir.mkdir(parents=True, exist_ok=True)
         target = self._image_dir / f"{camera_id}.jpg"
