@@ -1,14 +1,17 @@
 """Command line: migrate, serve, refoss."""
 
 import asyncio
+from pathlib import Path
 
 import typer
 import uvicorn
+import yaml
 from sqlalchemy import text
 
 from adscontrol.config import get_settings
-from adscontrol.db.engine import create_engine
+from adscontrol.db.engine import create_engine, make_session_factory
 from adscontrol.db.migrate import upgrade_head
+from adscontrol.maintenance.repo import import_tasks
 from adscontrol.refoss.client import RefossClient, discover_uuid
 from adscontrol.refoss.watch import watch
 
@@ -70,6 +73,25 @@ def zone_set(
 
     if asyncio.run(run()) == 0:
         raise typer.BadParameter(f"no zone named {name!r}")
+
+
+maintenance = typer.Typer(no_args_is_help=True, help="The maintenance list.")
+app.add_typer(maintenance, name="maintenance")
+
+
+@maintenance.command("import")
+def maintenance_import(path: Path) -> None:
+    """Add tasks and history from a YAML file. Safe to repeat; never overwrites."""
+
+    async def run() -> dict[str, int]:
+        engine = create_engine(get_settings().database_url)
+        async with make_session_factory(engine)() as session:
+            counts = await import_tasks(session, yaml.safe_load(path.read_text()))
+            await session.commit()
+        await engine.dispose()
+        return counts
+
+    typer.echo(asyncio.run(run()))
 
 
 @app.command()
