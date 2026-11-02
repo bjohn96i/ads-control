@@ -1,0 +1,25 @@
+# secrets and local config
+.env
+.env.*
+!.env.example
+
+# brainstorming and execution scratch
+.superpowers/
+
+# the development record, kept local: it carries personal detail about this house
+docs/
+
+# personal data, caches and working files
+data/
+*.pdf
+
+# build and tooling
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+node_modules/
+web/dist/
+*.tsbuildinfo
+.DS_Store
