@@ -2,11 +2,12 @@
 
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from sqlalchemy import text
 
-from adscontrol.api import health
+from adscontrol.api import health, live
 from adscontrol.config import Settings, get_settings
 from adscontrol.db.engine import create_engine, make_session_factory
 from adscontrol.refoss.recorder import SAMPLE_INTERVAL_S, Recorder
@@ -50,5 +51,7 @@ def create_app(
     app.state.sessions = sessions
     app.state.source_states = states
     app.state.db_check = db_check or _db_check
+    app.state.clock = lambda: datetime.now(timezone.utc)
     app.include_router(health.router)
+    app.include_router(live.router)
     return app
