@@ -8,6 +8,7 @@ import uvicorn
 import yaml
 from sqlalchemy import text
 
+from adscontrol.auth import set_pin
 from adscontrol.config import get_settings
 from adscontrol.db.engine import create_engine, make_session_factory
 from adscontrol.db.migrate import upgrade_head
@@ -92,6 +93,29 @@ def maintenance_import(path: Path) -> None:
         return counts
 
     typer.echo(asyncio.run(run()))
+
+
+pin = typer.Typer(no_args_is_help=True, help="The household PIN.")
+app.add_typer(pin, name="pin")
+
+
+@pin.command("set")
+def pin_set() -> None:
+    """Set or change the PIN, 6 to 12 digits. Changing it signs every device out."""
+    value = typer.prompt("New PIN", hide_input=True, confirmation_prompt=True)
+
+    async def run() -> None:
+        engine = create_engine(get_settings().database_url)
+        async with make_session_factory(engine)() as session:
+            await set_pin(session, value)
+            await session.commit()
+        await engine.dispose()
+
+    try:
+        asyncio.run(run())
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo("PIN set.")
 
 
 @app.command()

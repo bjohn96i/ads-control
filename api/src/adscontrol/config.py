@@ -3,6 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -19,6 +20,11 @@ class Settings(BaseSettings):
     refoss_host: str = "192.168.4.254"
     bind_host: str = "0.0.0.0"  # phones on the home Wi-Fi use the maintenance page
     port: int = 8100
+    allow_insecure_pin: bool = False  # local development only; PIN and cameras then use plain HTTP
+    google_client_id: str = ""
+    google_client_secret: SecretStr = SecretStr("")
+    sdm_project_id: str = ""
+    nest_token_path: Path = ROOT_DIR / "data" / "nest_token"
 
 
 @lru_cache

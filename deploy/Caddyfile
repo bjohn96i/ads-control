@@ -1,0 +1,5 @@
+# LAN HTTPS for the PIN, thermostat changes and cameras, using Caddy's own local certificate.
+control.home.arpa {
+	tls internal
+	reverse_proxy localhost:8100
+}

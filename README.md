@@ -45,13 +45,32 @@ To remove it, run `launchctl unload` on the same file and delete it.
 
 Open `http://<this-mac's-address>:8100/maintenance` on a phone on the home Wi-Fi. There is no login:
 anyone on the network can read energy and change the maintenance list. Cameras and thermostat
-changes will need a PIN and HTTPS before they ship.
+changes need the PIN, which only works over HTTPS.
 
 ```bash
 cd api
 uv run adscontrol maintenance import ../data/maintenance_seed.yaml   # adds what is missing, safe to repeat
 curl -s localhost:8100/api/maintenance/export > ../data/maintenance-backup.json
 ```
+
+## PIN and HTTPS
+
+```bash
+cd api && uv run adscontrol pin set                # run in your own terminal; it asks twice
+brew install caddy
+cp deploy/mac/org.adscontrol.caddy.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/org.adscontrol.caddy.plist
+caddy trust                                        # asks for your Mac password
+```
+
+Add a Local DNS record on the Pi-hole: `control.home.arpa` pointing at this Mac's address. On each
+phone, install Caddy's root certificate from
+`~/Library/Application Support/Caddy/pki/authorities/local/root.crt` and, on iPhone, turn it on
+under Settings > General > About > Certificate Trust Settings. That certificate lets its holder
+vouch for any site on that phone, so keep the Mac's copy of its private key private.
+
+Five wrong PINs lock it for a minute, doubling up to an hour, for everyone. Changing the PIN signs
+every device out. For local development without HTTPS, set `ALLOW_INSECURE_PIN=true`.
 
 ## Checking the panel
 

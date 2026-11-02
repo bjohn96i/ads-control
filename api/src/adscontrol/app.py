@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from adscontrol.api import bills, energy, health, live, maintenance
+from adscontrol.api import auth, bills, energy, health, live, maintenance
 from adscontrol.config import ROOT_DIR, Settings, get_settings
 from adscontrol.db.engine import create_engine, make_session_factory
 from adscontrol.detect.store import run_detection
@@ -69,6 +69,7 @@ def create_app(
     app.state.clock = lambda: datetime.now(timezone.utc)
     app.include_router(health.router)
     app.include_router(live.router)
+    app.include_router(auth.router)
     app.include_router(energy.router)
     app.include_router(bills.router)
     app.include_router(maintenance.router)

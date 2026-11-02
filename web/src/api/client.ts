@@ -46,6 +46,7 @@ export class ApiError extends Error {
   constructor(
     path: string,
     readonly status: number,
+    readonly retryAfter: string | null = null,
   ) {
     super(`${path} answered ${status}`);
   }
@@ -57,6 +58,6 @@ export async function send<T>(method: string, path: string, body?: unknown): Pro
     headers: { "Content-Type": "application/json", "X-Control-Action": "1" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!response.ok) throw new ApiError(path, response.status);
+  if (!response.ok) throw new ApiError(path, response.status, response.headers.get("Retry-After"));
   return (response.status === 204 ? null : await response.json()) as T;
 }
