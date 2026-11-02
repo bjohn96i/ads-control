@@ -4,6 +4,8 @@ set_setpoint is the only write here, and the app calls it only when a person pre
 The API offers no way to read or change a Nest schedule, and neither does this client.
 """
 
+import base64
+import json
 import os
 import time
 from collections.abc import Callable
@@ -16,7 +18,17 @@ import httpx
 TOKEN_URL = "https://www.googleapis.com/oauth2/v4/token"
 API_URL = "https://smartdevicemanagement.googleapis.com/v1"
 REDIRECT_URI = "https://www.google.com"
-SCOPE = "https://www.googleapis.com/auth/sdm.service"
+# Pub/Sub is how camera events reach the app.
+SCOPE = "https://www.googleapis.com/auth/sdm.service https://www.googleapis.com/auth/pubsub"
+PUBSUB_URL = "https://pubsub.googleapis.com/v1"
+CAMERA_TYPES = {
+    "sdm.devices.types.CAMERA": "camera",
+    "sdm.devices.types.DOORBELL": "doorbell",
+    "sdm.devices.types.DISPLAY": "display",
+}
+STREAM = "sdm.devices.commands.CameraLiveStream."
+EVENT_IMAGE = "sdm.devices.commands.CameraEventImage.GenerateImage"
+IMAGE_WIDTH = 960
 THERMOSTAT_TYPE = "sdm.devices.types.THERMOSTAT"
 TRAIT = "sdm.devices.traits."
 SETPOINT = "sdm.devices.commands.ThermostatTemperatureSetpoint."
@@ -43,6 +55,13 @@ class Thermostat:
     heat_c: float | None
     eco: bool
     online: bool
+
+
+@dataclass(frozen=True)
+class Camera:
+    device_id: str
+    name: str
+    kind: str
 
 
 def authorization_url(project_id: str, client_id: str) -> str:
@@ -115,6 +134,12 @@ def _parse(device: dict) -> Thermostat:
         eco=trait("ThermostatEco").get("mode") == "MANUAL_ECO",
         online=trait("Connectivity").get("status") == "ONLINE",
     )
+
+
+def _device_name(device: dict) -> str | None:
+    info = device.get("traits", {}).get(TRAIT + "Info", {})
+    relations = device.get("parentRelations") or [{}]
+    return info.get("customName") or relations[0].get("displayName")
 
 
 def _setpoint_command(mode: str, cool_c: float | None, heat_c: float | None) -> dict:
@@ -193,6 +218,71 @@ class SdmClient:
         body = await self._request("GET", f"{self._project_url}/devices")
         return [_parse(d) for d in body.get("devices", []) if d.get("type") == THERMOSTAT_TYPE]
 
+    async def list_cameras(self) -> list[Camera]:
+        body = await self._request("GET", f"{self._project_url}/devices")
+        return [
+            Camera(
+                device_id=d["name"].rsplit("/", 1)[-1],
+                name=_device_name(d) or "Camera",
+                kind=CAMERA_TYPES[d["type"]],
+            )
+            for d in body.get("devices", [])
+            if d.get("type") in CAMERA_TYPES and TRAIT + "CameraLiveStream" in d.get("traits", {})
+        ]
+
+    async def _execute(self, device_id: str, command: str, params: dict) -> dict:
+        return await self._request(
+            "POST",
+            f"{self._project_url}/devices/{device_id}:executeCommand",
+            json={"command": command, "params": params},
+        )
+
+    async def generate_stream(self, device_id: str, offer_sdp: str) -> dict:
+        body = await self._execute(
+            device_id, STREAM + "GenerateWebRtcStream", {"offerSdp": offer_sdp}
+        )
+        try:
+            results = body["results"]
+            return {
+                "answer_sdp": results["answerSdp"],
+                "expires_at": results["expiresAt"],
+                "media_session_id": results["mediaSessionId"],
+            }
+        except KeyError as exc:
+            raise NestError("Google's stream answer was incomplete") from exc
+
+    async def stop_stream(self, device_id: str, session_id: str) -> None:
+        await self._execute(device_id, STREAM + "StopWebRtcStream", {"mediaSessionId": session_id})
+
+    async def fetch_event_image(self, device_id: str, event_id: str) -> bytes:
+        body = await self._execute(device_id, EVENT_IMAGE, {"eventId": event_id})
+        try:
+            url, token = body["results"]["url"], body["results"]["token"]
+            async with httpx.AsyncClient(timeout=20) as client:
+                response = await client.get(
+                    url, params={"width": IMAGE_WIDTH}, headers={"Authorization": f"Basic {token}"}
+                )
+        except (KeyError, httpx.HTTPError) as exc:
+            raise NestError(f"could not download the event image: {type(exc).__name__}") from exc
+        if not response.is_success:
+            raise NestError(f"event image answered {response.status_code}")
+        return response.content
+
+    async def pull_events(self, subscription: str) -> list[tuple[str, dict | None]]:
+        body = await self._request(
+            "POST",
+            f"{PUBSUB_URL}/{subscription}:pull",
+            json={"maxMessages": 50, "returnImmediately": True},
+        )
+        return [
+            (m["ackId"], _decode(m.get("message", {}))) for m in body.get("receivedMessages", [])
+        ]
+
+    async def ack_events(self, subscription: str, ack_ids: list[str]) -> None:
+        await self._request(
+            "POST", f"{PUBSUB_URL}/{subscription}:acknowledge", json={"ackIds": ack_ids}
+        )
+
     async def set_setpoint(
         self, device_id: str, mode: str, *, cool_c: float | None = None, heat_c: float | None = None
     ) -> None:
@@ -201,6 +291,13 @@ class SdmClient:
             f"{self._project_url}/devices/{device_id}:executeCommand",
             json=_setpoint_command(mode, cool_c, heat_c),
         )
+
+
+def _decode(message: dict) -> dict | None:
+    try:
+        return json.loads(base64.b64decode(message["data"], validate=True))
+    except (KeyError, ValueError):
+        return None
 
 
 def _message(response: httpx.Response) -> str:

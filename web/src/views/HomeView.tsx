@@ -1,17 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
-import { getJson, type Live } from "../api/client";
+import { type CameraInfo, getJson, type Live } from "../api/client";
 import { CameraTile } from "../components/CameraTile";
 import { HouseScene } from "../components/HouseScene";
 import { StatusStrip } from "../components/StatusStrip";
 import { UsagePanel } from "../components/UsagePanel";
-
-const CAMERAS = ["Nest Cam 1", "Nest Cam 2", "Doorbell", "Hub Max"];
 
 export function HomeView() {
   const { data, isError } = useQuery({
     queryKey: ["live"],
     queryFn: () => getJson<Live>("/api/live"),
     refetchInterval: 5000,
+  });
+
+  const cameras = useQuery({
+    queryKey: ["cameras"],
+    queryFn: () => getJson<{ cameras: CameraInfo[] }>("/api/cameras"),
+    refetchInterval: 30_000,
+  });
+  const auth = useQuery({
+    queryKey: ["auth-status"],
+    queryFn: () => getJson<{ unlocked: boolean }>("/api/auth/status"),
   });
 
   return (
@@ -27,8 +35,8 @@ export function HomeView() {
           <div className="side">
             <UsagePanel live={data} />
             <div className="cameras">
-              {CAMERAS.map((name) => (
-                <CameraTile key={name} name={name} />
+              {cameras.data?.cameras.map((camera) => (
+                <CameraTile key={camera.id} camera={camera} unlocked={auth.data?.unlocked ?? false} />
               ))}
             </div>
           </div>

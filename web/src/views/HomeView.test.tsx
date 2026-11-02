@@ -26,11 +26,16 @@ function renderHome(
   next: unknown = null,
   bill: unknown = null,
   climate: unknown[] = [],
+  cameras: unknown[] = [],
 ) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) =>
-      url === "/api/climate/summary"
+      url === "/api/auth/status"
+        ? new Response(JSON.stringify({ pin_set: true, unlocked: false }))
+        : url === "/api/cameras"
+          ? new Response(JSON.stringify({ cameras }))
+          : url === "/api/climate/summary"
         ? new Response(JSON.stringify({ thermostats: climate }))
         : url === "/api/maintenance/next"
         ? new Response(JSON.stringify(next))
@@ -157,9 +162,13 @@ describe("HomeView", () => {
     expect(within(pin).getByText("Unusual")).toBeInTheDocument();
   });
 
-  it("camera_tiles_and_strip_say_not_connected_yet", async () => {
-    renderHome(LIVE);
-    await screen.findByRole("link", { name: /Dishwasher/ });
-    expect(screen.getAllByText(/not connected yet/i).length).toBeGreaterThanOrEqual(4);
+  it("shows_a_tile_for_each_real_camera", async () => {
+    renderHome(LIVE, true, null, null, [], [
+      { id: 1, name: "Backyard camera", kind: "camera", last_event: null, last_event_at: null, has_image: false, image_age_s: null },
+      { id: 2, name: "Entryway doorbell", kind: "doorbell", last_event: "chime", last_event_at: "2026-11-02T19:14:00Z", has_image: false, image_age_s: null },
+    ]);
+    expect(await screen.findByText("Backyard camera")).toBeInTheDocument();
+    expect(screen.getByText("Entryway doorbell")).toBeInTheDocument();
+    expect(screen.getByText(/doorbell rang/i)).toBeInTheDocument();
   });
 });

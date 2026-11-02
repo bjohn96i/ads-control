@@ -61,3 +61,13 @@ export async function send<T>(method: string, path: string, body?: unknown): Pro
   if (!response.ok) throw new ApiError(path, response.status, response.headers.get("Retry-After"));
   return (response.status === 204 ? null : await response.json()) as T;
 }
+
+export type CameraInfo = {
+  id: number;
+  name: string;
+  kind: string;
+  last_event: string | null;
+  last_event_at: string | null;
+  has_image: boolean;
+  image_age_s: number | null;
+};

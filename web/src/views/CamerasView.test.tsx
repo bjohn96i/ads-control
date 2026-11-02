@@ -1,0 +1,152 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CamerasView, LIVE_LIMIT_MS } from "./CamerasView";
+
+const CAMERAS = [
+  { id: 7, name: "Backyard camera", kind: "camera", last_event: "motion", last_event_at: "2026-11-02T19:14:00Z", has_image: true, image_age_s: 60 },
+  { id: 8, name: "Living Room Display", kind: "display", last_event: null, last_event_at: null, has_image: false, image_age_s: null },
+];
+
+class FakePeer {
+  static made: FakePeer[] = [];
+  closed = false;
+  ontrack: ((e: unknown) => void) | null = null;
+  constructor() {
+    FakePeer.made.push(this);
+  }
+  addTransceiver = vi.fn();
+  createDataChannel = vi.fn();
+  createOffer = vi.fn(async () => ({ type: "offer", sdp: "offer-sdp" }));
+  setLocalDescription = vi.fn(async () => {});
+  setRemoteDescription = vi.fn(async () => {});
+  close = vi.fn(() => {
+    this.closed = true;
+  });
+}
+
+let posts: { url: string; method: string; body: any }[];
+
+function show({ unlocked = true, liveStatus = 200 } = {}) {
+  posts = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET") {
+        if (url === "/api/auth/status") return new Response(JSON.stringify({ pin_set: true, unlocked }));
+        return new Response(JSON.stringify({ cameras: CAMERAS }));
+      }
+      posts.push({ url, method, body: init?.body ? JSON.parse(init.body as string) : null });
+      if (method === "DELETE") return new Response(null, { status: 204 });
+      return new Response(
+        JSON.stringify({ answer_sdp: "answer-sdp", expires_at: "t", media_session_id: "s1" }),
+        { status: liveStatus },
+      );
+    }),
+  );
+  return render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <CamerasView />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+beforeEach(() => {
+  FakePeer.made = [];
+  vi.stubGlobal("RTCPeerConnection", FakePeer);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+async function card(name: string) {
+  const heading = await screen.findByRole("heading", { name });
+  return within(heading.closest("article")!);
+}
+
+describe("CamerasView", () => {
+  it("locked_tile_prompts_for_pin", async () => {
+    show({ unlocked: false });
+    await card("Backyard camera");
+    expect(await screen.findByLabelText(/household pin/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /watch live/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("click_starts_live_only_on_click", async () => {
+    show();
+    const c = await card("Backyard camera");
+    await c.findByRole("button", { name: /watch live/i });
+    expect(FakePeer.made).toHaveLength(0);
+    expect(posts).toHaveLength(0);
+    fireEvent.click(c.getByRole("button", { name: /watch live/i }));
+    await waitFor(() => expect(posts[0]?.url).toBe("/api/cameras/7/live"));
+    expect(posts[0].body).toEqual({ offer_sdp: "offer-sdp" });
+    const peer = FakePeer.made[0];
+    await waitFor(() =>
+      expect(peer.setRemoteDescription).toHaveBeenCalledWith({ type: "answer", sdp: "answer-sdp" }),
+    );
+    expect(peer.addTransceiver).toHaveBeenCalledWith("audio", { direction: "recvonly" });
+    expect(peer.addTransceiver).toHaveBeenCalledWith("video", { direction: "recvonly" });
+    expect(peer.createDataChannel).toHaveBeenCalled();
+  });
+
+  it("battery_stream_stops_at_5_minutes_and_offers_watch_again", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    show();
+    const c = await card("Backyard camera");
+    fireEvent.click(await c.findByRole("button", { name: /watch live/i }));
+    await waitFor(() => expect(FakePeer.made[0]?.setRemoteDescription).toHaveBeenCalled());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LIVE_LIMIT_MS + 10);
+    });
+    expect(LIVE_LIMIT_MS).toBe(5 * 60 * 1000);
+    expect(FakePeer.made[0].closed).toBe(true);
+    await waitFor(() => expect(posts.some((p) => p.method === "DELETE" && p.url === "/api/cameras/7/live/s1")).toBe(true));
+    expect(await c.findByRole("button", { name: /watch again/i })).toBeInTheDocument();
+  });
+
+  it("stop_ends_the_stream_early", async () => {
+    show();
+    const c = await card("Backyard camera");
+    fireEvent.click(await c.findByRole("button", { name: /watch live/i }));
+    fireEvent.click(await c.findByRole("button", { name: /^stop$/i }));
+    await waitFor(() => expect(FakePeer.made[0].closed).toBe(true));
+    await waitFor(() => expect(posts.some((p) => p.method === "DELETE")).toBe(true));
+  });
+
+  it("leaving_page_stops_stream", async () => {
+    const view = show();
+    const c = await card("Backyard camera");
+    fireEvent.click(await c.findByRole("button", { name: /watch live/i }));
+    await c.findByRole("button", { name: /^stop$/i });
+    await waitFor(() => expect(FakePeer.made[0].setRemoteDescription).toHaveBeenCalled());
+    view.unmount();
+    expect(FakePeer.made[0].closed).toBe(true);
+    await waitFor(() => expect(posts.some((p) => p.method === "DELETE")).toBe(true));
+  });
+
+  it("unavailable_camera_explains_and_closes", async () => {
+    show({ liveStatus: 409 });
+    const c = await card("Living Room Display");
+    fireEvent.click(await c.findByRole("button", { name: /watch live/i }));
+    expect(await c.findByRole("alert")).toHaveTextContent(/isn.t available/i);
+    expect(FakePeer.made[0].closed).toBe(true);
+    expect(c.getByRole("button", { name: /watch live/i })).toBeInTheDocument();
+  });
+
+  it("video_is_muted_with_controls_so_it_can_autoplay", async () => {
+    show();
+    const c = await card("Backyard camera");
+    fireEvent.click(await c.findByRole("button", { name: /watch live/i }));
+    const video = await c.findByTestId("live-video");
+    expect((video as HTMLVideoElement).muted).toBe(true);
+    expect(video).toHaveAttribute("controls");
+  });
+});

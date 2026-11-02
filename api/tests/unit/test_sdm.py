@@ -1,3 +1,4 @@
+import base64
 import inspect
 import json
 import stat
@@ -152,7 +153,16 @@ def test_client_has_no_schedule_method():
     public = {
         n for n, _ in inspect.getmembers(SdmClient, inspect.isfunction) if not n.startswith("_")
     }
-    assert public == {"list_thermostats", "set_setpoint"}
+    assert public == {
+        "list_thermostats",
+        "set_setpoint",
+        "list_cameras",
+        "generate_stream",
+        "stop_stream",
+        "fetch_event_image",
+        "pull_events",
+        "ack_events",
+    }
 
 
 @respx.mock
@@ -238,7 +248,9 @@ def test_authorization_url_uses_partner_connections():
     assert url.netloc == "nestservices.google.com"
     assert PROJECT in url.path
     assert query["redirect_uri"] == ["https://www.google.com"]
-    assert query["scope"] == ["https://www.googleapis.com/auth/sdm.service"]
+    assert query["scope"] == [
+        "https://www.googleapis.com/auth/sdm.service https://www.googleapis.com/auth/pubsub"
+    ]
     assert query["access_type"] == ["offline"]
     assert query["prompt"] == ["consent"]
 
@@ -264,3 +276,164 @@ async def test_exchange_without_refresh_token_fails_clearly(tmp_path):
     respx.post(TOKEN_URL).mock(return_value=httpx.Response(200, json={"access_token": "a1"}))
     with pytest.raises(NestError):
         await exchange_code("client-id", "client-secret", "4/abc", tmp_path / "token")
+
+
+DOORBELL = {
+    "name": f"enterprises/{PROJECT}/devices/door1",
+    "type": "sdm.devices.types.DOORBELL",
+    "traits": {
+        "sdm.devices.traits.Info": {"customName": "Entryway doorbell"},
+        "sdm.devices.traits.CameraLiveStream": {"supportedProtocols": ["WEB_RTC"]},
+    },
+}
+DISPLAY = {
+    "name": f"enterprises/{PROJECT}/devices/hub1",
+    "type": "sdm.devices.types.DISPLAY",
+    "traits": {
+        "sdm.devices.traits.Info": {"customName": ""},
+        "sdm.devices.traits.CameraLiveStream": {"supportedProtocols": ["WEB_RTC"]},
+    },
+    "parentRelations": [{"displayName": "Living Room"}],
+}
+NO_CAMERA_DISPLAY = {
+    "name": "enterprises/p/devices/hub2",
+    "type": "sdm.devices.types.DISPLAY",
+    "traits": {},
+}
+
+
+@respx.mock
+async def test_lists_cameras_with_their_kind(tmp_path):
+    _token()
+    respx.get(f"{BASE}/devices").mock(
+        return_value=httpx.Response(
+            200, json={"devices": [THERMOSTAT, DOORBELL, DISPLAY, NO_CAMERA_DISPLAY]}
+        )
+    )
+    cameras = await _client(tmp_path).list_cameras()
+    assert [(c.device_id, c.name, c.kind) for c in cameras] == [
+        ("door1", "Entryway doorbell", "doorbell"),
+        ("hub1", "Living Room", "display"),
+    ]
+
+
+@respx.mock
+async def test_generate_stream_sends_the_offer_and_returns_the_answer(tmp_path):
+    _token()
+    route = respx.post(f"{BASE}/devices/door1:executeCommand").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": {
+                    "answerSdp": "v=0",
+                    "expiresAt": "2026-11-02T16:05:00Z",
+                    "mediaSessionId": "s1",
+                }
+            },
+        )
+    )
+    result = await _client(tmp_path).generate_stream("door1", "offer")
+    body = json.loads(route.calls[0].request.content)
+    assert body == {
+        "command": "sdm.devices.commands.CameraLiveStream.GenerateWebRtcStream",
+        "params": {"offerSdp": "offer"},
+    }
+    assert result == {
+        "answer_sdp": "v=0",
+        "expires_at": "2026-11-02T16:05:00Z",
+        "media_session_id": "s1",
+    }
+
+
+@respx.mock
+async def test_stop_stream_names_the_session(tmp_path):
+    _token()
+    route = respx.post(f"{BASE}/devices/door1:executeCommand").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    await _client(tmp_path).stop_stream("door1", "s1")
+    body = json.loads(route.calls[0].request.content)
+    assert body["command"].endswith("StopWebRtcStream")
+    assert body["params"] == {"mediaSessionId": "s1"}
+
+
+@respx.mock
+async def test_event_image_downloads_with_basic_token(tmp_path):
+    _token()
+    respx.post(f"{BASE}/devices/door1:executeCommand").mock(
+        return_value=httpx.Response(
+            200, json={"results": {"url": "https://img.example/x", "token": "g.0.tok"}}
+        )
+    )
+    image = respx.get("https://img.example/x").mock(
+        return_value=httpx.Response(200, content=b"jpegbytes")
+    )
+    assert await _client(tmp_path).fetch_event_image("door1", "e1") == b"jpegbytes"
+    request = image.calls[0].request
+    assert request.headers["authorization"] == "Basic g.0.tok"
+    assert request.url.params["width"] == "960"
+
+
+@respx.mock
+async def test_expired_event_image_is_a_nest_error(tmp_path):
+    _token()
+    respx.post(f"{BASE}/devices/door1:executeCommand").mock(
+        return_value=httpx.Response(400, json={"error": {"message": "no longer available"}})
+    )
+    with pytest.raises(NestError):
+        await _client(tmp_path).fetch_event_image("door1", "e1")
+
+
+@respx.mock
+async def test_failed_image_download_is_a_nest_error(tmp_path):
+    _token()
+    respx.post(f"{BASE}/devices/door1:executeCommand").mock(
+        return_value=httpx.Response(
+            200, json={"results": {"url": "https://img.example/x", "token": "t"}}
+        )
+    )
+    respx.get("https://img.example/x").mock(return_value=httpx.Response(410))
+    with pytest.raises(NestError):
+        await _client(tmp_path).fetch_event_image("door1", "e1")
+
+
+SUBSCRIPTION = "projects/p/subscriptions/s"
+PUBSUB = f"https://pubsub.googleapis.com/v1/{SUBSCRIPTION}"
+
+
+@respx.mock
+async def test_pull_decodes_messages_and_tolerates_bad_ones(tmp_path):
+    _token()
+    good = base64.b64encode(json.dumps({"eventId": "x"}).encode()).decode()
+    respx.post(f"{PUBSUB}:pull").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "receivedMessages": [
+                    {"ackId": "a1", "message": {"data": good}},
+                    {"ackId": "a2", "message": {"data": "!!!notbase64"}},
+                    {"ackId": "a3", "message": {}},
+                ]
+            },
+        )
+    )
+    assert await _client(tmp_path).pull_events(SUBSCRIPTION) == [
+        ("a1", {"eventId": "x"}),
+        ("a2", None),
+        ("a3", None),
+    ]
+
+
+@respx.mock
+async def test_pull_with_nothing_waiting_is_empty(tmp_path):
+    _token()
+    respx.post(f"{PUBSUB}:pull").mock(return_value=httpx.Response(200, json={}))
+    assert await _client(tmp_path).pull_events(SUBSCRIPTION) == []
+
+
+@respx.mock
+async def test_ack_sends_ids(tmp_path):
+    _token()
+    route = respx.post(f"{PUBSUB}:acknowledge").mock(return_value=httpx.Response(200, json={}))
+    await _client(tmp_path).ack_events(SUBSCRIPTION, ["a1", "a2"])
+    assert json.loads(route.calls[0].request.content) == {"ackIds": ["a1", "a2"]}

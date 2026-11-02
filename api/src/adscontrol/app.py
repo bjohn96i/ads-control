@@ -10,7 +10,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from adscontrol.api import auth, bills, climate, energy, health, live, maintenance
+from adscontrol.api import auth, bills, cameras, climate, energy, health, live, maintenance
+from adscontrol.cameras.service import CAMERA_SYNC_S, EVENT_POLL_S, CameraService
 from adscontrol.config import ROOT_DIR, Settings, get_settings
 from adscontrol.db.engine import create_engine, make_session_factory
 from adscontrol.detect.store import run_detection
@@ -55,6 +56,12 @@ def create_app(
         ]
         if sdm is not None:
             jobs.append(Job("nest", NEST_INTERVAL_S, ThermostatRecorder(sdm, sessions).poll))
+            service = CameraService(
+                sdm, settings.google_pubsub_subscription, sessions, settings.camera_image_dir
+            )
+            jobs.append(Job("cameras", CAMERA_SYNC_S, service.sync))
+            if settings.google_pubsub_subscription:
+                jobs.append(Job("camera_events", EVENT_POLL_S, service.poll))
         if settings.weather_lat is not None and settings.weather_lon is not None:
             weather = WeatherRecorder(settings.weather_lat, settings.weather_lon, sessions)
             jobs.append(Job("weather", WEATHER_INTERVAL_S, weather.poll))
@@ -89,6 +96,7 @@ def create_app(
     app.include_router(auth.router)
     app.include_router(energy.router)
     app.include_router(climate.router)
+    app.include_router(cameras.router)
     app.include_router(bills.router)
     app.include_router(maintenance.router)
 
