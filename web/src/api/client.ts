@@ -14,6 +14,7 @@ export type Live = {
   stale: boolean;
   whole_house_w: number | null;
   unmetered_w: number | null;
+  charger_estimate_w: number | null;
   cost_per_hour_estimate: number | null;
   rate_period: RatePeriod;
   zones: LiveZone[];

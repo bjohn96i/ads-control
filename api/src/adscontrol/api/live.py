@@ -1,5 +1,6 @@
 """What the house is doing right now. A stopped feed answers null, never 0 W."""
 
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Request
@@ -10,6 +11,11 @@ from adscontrol.rates import LOCAL, all_in_cents, rate_for, rate_period
 from adscontrol.zones import list_zones, zone_power
 
 STALE_AFTER_S = 30
+# The charger has no sensor of its own, so it is inferred: a large load on the incoming lines
+# that no zone explains, held long enough that it is not an A/C or motor starting up.
+CHARGER_MIN_W = 1500.0
+CHARGER_WINDOW = timedelta(seconds=35)
+CHARGER_MIN_SAMPLES = 3
 
 router = APIRouter()
 
@@ -20,6 +26,28 @@ _LATEST = text(
     ORDER BY channel, time DESC
     """
 )
+
+
+_RECENT = text(
+    """
+    SELECT time, channel, power_w FROM channel_readings WHERE time > :since AND time <= :now
+    """
+)
+
+
+def _charger_estimate(rows, zones) -> float:
+    by_time: dict[datetime, dict[int, float]] = defaultdict(dict)
+    for row in rows:
+        by_time[row.time][row.channel] = row.power_w
+    unexplained = []
+    for by_channel in by_time.values():
+        powers = {z.kind: 0.0 for z in zones}
+        for z in zones:
+            powers[z.kind] += zone_power(z, by_channel) or 0.0
+        unexplained.append(powers["incoming"] - powers["circuit"])
+    if len(unexplained) < CHARGER_MIN_SAMPLES or min(unexplained) < CHARGER_MIN_W:
+        return 0.0
+    return sum(unexplained) / len(unexplained)
 
 
 def _month_start(now: datetime) -> datetime:
@@ -36,6 +64,7 @@ async def live(request: Request) -> dict:
         zones = await list_zones(session)
         rate = await rate_for(session, now.astimezone(LOCAL).date())
         month = await energy_by_zone(session, _month_start(now), now)
+        recent = (await session.execute(_RECENT, {"since": now - CHARGER_WINDOW, "now": now})).all()
 
     as_of = max((r.time for r in rows), default=None)
     stale = as_of is None or (now - as_of).total_seconds() > STALE_AFTER_S
@@ -57,6 +86,7 @@ async def live(request: Request) -> dict:
         "stale": stale,
         "whole_house_w": whole,
         "unmetered_w": unmetered,
+        "charger_estimate_w": None if stale else _charger_estimate(recent, zones),
         "cost_per_hour_estimate": (
             None if whole is None else whole / 1000 * all_in_cents(rate, period) / 100
         ),

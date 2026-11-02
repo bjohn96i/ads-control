@@ -95,3 +95,41 @@ async def test_month_coverage_reports_gap(session, migrated_db):
     body = await _get(migrated_db)
     assert body["month_coverage"] < 0.01
     assert body["month_kwh"] >= 0
+
+
+async def _charging(session, seconds_ago: list[int], whole: float):
+    for ago in seconds_ago:
+        await _sample(session, {**FULL, 1: whole / 2, 7: whole / 2}, NOW - timedelta(seconds=ago))
+
+
+async def test_sustained_unmetered_load_is_estimated_as_the_charger(session, migrated_db):
+    await _charging(session, [20, 10, 0], 7200.0)
+    charger = (await _get(migrated_db))["charger_estimate_w"]
+    assert charger == pytest.approx(7200)
+
+
+async def test_one_spike_is_not_the_charger(session, migrated_db):
+    await _charging(session, [20, 10], 100.0)
+    await _charging(session, [0], 7200.0)
+    assert (await _get(migrated_db))["charger_estimate_w"] == 0
+
+
+async def test_normal_background_is_not_the_charger(session, migrated_db):
+    await _charging(session, [20, 10, 0], 300.0)
+    assert (await _get(migrated_db))["charger_estimate_w"] == 0
+
+
+async def test_load_on_a_zone_is_not_the_charger(session, migrated_db):
+    for ago in (20, 10, 0):
+        await _sample(session, {**FULL, 1: 4000.0, 7: 0.0, 3: 4000.0}, NOW - timedelta(seconds=ago))
+    assert (await _get(migrated_db))["charger_estimate_w"] == 0
+
+
+async def test_too_few_recent_readings_is_not_the_charger(session, migrated_db):
+    await _charging(session, [0], 7200.0)
+    assert (await _get(migrated_db))["charger_estimate_w"] == 0
+
+
+async def test_stale_data_has_no_charger_estimate(session, migrated_db):
+    await _charging(session, [60, 50, 40], 7200.0)
+    assert (await _get(migrated_db))["charger_estimate_w"] is None

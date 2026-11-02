@@ -7,6 +7,7 @@ import { HomeView } from "./HomeView";
 const LIVE = {
   as_of: "2026-11-02T05:00:00Z",
   stale: false,
+  charger_estimate_w: 7200,
   whole_house_w: 1712,
   unmetered_w: 94,
   cost_per_hour_estimate: 0.115,
@@ -87,6 +88,24 @@ describe("HomeView", () => {
   it("api_failure_shows_unreachable_state", async () => {
     renderHome({}, false);
     expect(await screen.findByText(/can.t reach the house server/i)).toBeInTheDocument();
+  });
+
+  it("charging_car_shows_a_pin_labelled_as_an_estimate", async () => {
+    renderHome(LIVE);
+    const pin = await screen.findByRole("link", { name: /Car charger \(estimate\)/ });
+    expect(within(pin).getByText("7.2 kW")).toBeInTheDocument();
+  });
+
+  it("idle_charger_says_not_charging_rather_than_0_w", async () => {
+    renderHome({ ...LIVE, charger_estimate_w: 0 });
+    const pin = await screen.findByRole("link", { name: /Car charger/ });
+    expect(within(pin).getByText("Not charging")).toBeInTheDocument();
+  });
+
+  it("stale_charger_shows_no_claim", async () => {
+    renderHome({ ...LIVE, stale: true, charger_estimate_w: null });
+    const pin = await screen.findByRole("link", { name: /Car charger/ });
+    expect(within(pin).getByText("—")).toBeInTheDocument();
   });
 
   it("camera_tiles_and_strip_say_not_connected_yet", async () => {

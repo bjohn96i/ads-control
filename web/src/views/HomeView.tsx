@@ -23,7 +23,7 @@ export function HomeView() {
       {isError ? <p className="warn" role="alert">Can't reach the house server</p> : null}
       {data ? (
         <div className="overview">
-          <HouseScene zones={data.zones} />
+          <HouseScene zones={data.zones} chargerWatts={data.charger_estimate_w} />
           <div className="side">
             <UsagePanel live={data} />
             <div className="cameras">
