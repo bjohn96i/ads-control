@@ -3,12 +3,15 @@
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from adscontrol.api import health, live
-from adscontrol.config import Settings, get_settings
+from adscontrol.config import ROOT_DIR, Settings, get_settings
 from adscontrol.db.engine import create_engine, make_session_factory
 from adscontrol.refoss.recorder import SAMPLE_INTERVAL_S, Recorder
 from adscontrol.scheduler import Job, Scheduler, SourceState
@@ -20,6 +23,7 @@ def create_app(
     db_check: Callable[[], Awaitable[bool]] | None = None,
     jobs: list[Job] | None = None,
     start_jobs: bool = True,
+    web_dir: Path = ROOT_DIR / "web" / "dist",
 ) -> FastAPI:
     settings = settings or get_settings()
     engine = create_engine(settings.database_url)
@@ -54,4 +58,18 @@ def create_app(
     app.state.clock = lambda: datetime.now(timezone.utc)
     app.include_router(health.router)
     app.include_router(live.router)
+
+    if (web_dir / "index.html").exists():
+        if (web_dir / "assets").is_dir():
+            app.mount("/assets", StaticFiles(directory=web_dir / "assets"), name="assets")
+
+        @app.get("/{path:path}", include_in_schema=False)
+        async def page(path: str) -> FileResponse:
+            if path.startswith("api/"):
+                raise HTTPException(status_code=404)
+            candidate = (web_dir / path).resolve()
+            if candidate.is_file() and candidate.is_relative_to(web_dir.resolve()):
+                return FileResponse(candidate)
+            return FileResponse(web_dir / "index.html")
+
     return app
