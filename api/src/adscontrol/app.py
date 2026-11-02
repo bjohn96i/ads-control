@@ -9,6 +9,7 @@ from sqlalchemy import text
 from adscontrol.api import health
 from adscontrol.config import Settings, get_settings
 from adscontrol.db.engine import create_engine, make_session_factory
+from adscontrol.refoss.recorder import SAMPLE_INTERVAL_S, Recorder
 from adscontrol.scheduler import Job, Scheduler, SourceState
 
 
@@ -22,7 +23,9 @@ def create_app(
     settings = settings or get_settings()
     engine = create_engine(settings.database_url)
     sessions = make_session_factory(engine)
-    jobs = [] if jobs is None else jobs
+    if jobs is None:
+        recorder = Recorder(settings.refoss_host, sessions)
+        jobs = [Job("refoss", SAMPLE_INTERVAL_S, recorder.poll)]
     states = {j.name: SourceState(j.interval_s) for j in jobs}
 
     async def _db_check() -> bool:
