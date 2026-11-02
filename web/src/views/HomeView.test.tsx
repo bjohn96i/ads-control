@@ -20,10 +20,14 @@ const LIVE = {
   ],
 };
 
-function renderHome(body: unknown, ok = true) {
+function renderHome(body: unknown, ok = true, next: unknown = null) {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => new Response(JSON.stringify(body), { status: ok ? 200 : 500 })),
+    vi.fn(async (url: string) =>
+      url === "/api/maintenance/next"
+        ? new Response(JSON.stringify(next))
+        : new Response(JSON.stringify(body), { status: ok ? 200 : 500 }),
+    ),
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -108,9 +112,22 @@ describe("HomeView", () => {
     expect(within(pin).getByText("—")).toBeInTheDocument();
   });
 
+  it("strip_shows_the_next_maintenance_item_and_links_to_it", async () => {
+    renderHome(LIVE, true, { name: "HVAC Filters", next_due: "2026-08-23", overdue: true });
+    const link = await screen.findByRole("link", { name: /HVAC Filters/ });
+    expect(link).toHaveAttribute("href", "/maintenance");
+    expect(link).toHaveTextContent(/overdue since Aug 23/i);
+  });
+
+  it("strip_with_nothing_due_still_links_to_maintenance", async () => {
+    renderHome(LIVE);
+    const link = await screen.findByRole("link", { name: /Maintenance: nothing scheduled/i });
+    expect(link).toHaveAttribute("href", "/maintenance");
+  });
+
   it("camera_tiles_and_strip_say_not_connected_yet", async () => {
     renderHome(LIVE);
     await screen.findByRole("link", { name: /Dishwasher/ });
-    expect(screen.getAllByText(/not connected yet/i).length).toBeGreaterThanOrEqual(4);
+    expect(screen.getAllByText(/not connected yet/i).length).toBeGreaterThanOrEqual(5);
   });
 });

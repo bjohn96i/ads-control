@@ -41,6 +41,18 @@ launchctl list | grep adscontrol
 
 To remove it, run `launchctl unload` on the same file and delete it.
 
+## Maintenance
+
+Open `http://<this-mac's-address>:8100/maintenance` on a phone on the home Wi-Fi. There is no login:
+anyone on the network can read energy and change the maintenance list. Cameras and thermostat
+changes will need a PIN and HTTPS before they ship.
+
+```bash
+cd api
+uv run adscontrol maintenance import ../data/maintenance_seed.yaml   # adds what is missing, safe to repeat
+curl -s localhost:8100/api/maintenance/export > ../data/maintenance-backup.json
+```
+
 ## Checking the panel
 
 ```bash

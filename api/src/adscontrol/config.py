@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://adscontrol:adscontrol@localhost:5432/adscontrol"
     refoss_host: str = "192.168.4.254"
-    bind_host: str = "127.0.0.1"
+    bind_host: str = "0.0.0.0"  # phones on the home Wi-Fi use the maintenance page
     port: int = 8100
 
 
