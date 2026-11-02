@@ -125,6 +125,12 @@ describe("HomeView", () => {
     expect(link).toHaveAttribute("href", "/maintenance");
   });
 
+  it("flagged_zone_says_so_in_words", async () => {
+    renderHome({ ...LIVE, zones: [{ ...LIVE.zones[0], flagged: true }] });
+    const pin = await screen.findByRole("link", { name: /Dishwasher/ });
+    expect(within(pin).getByText("Unusual")).toBeInTheDocument();
+  });
+
   it("camera_tiles_and_strip_say_not_connected_yet", async () => {
     renderHome(LIVE);
     await screen.findByRole("link", { name: /Dishwasher/ });

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Request
 from sqlalchemy import text
 
+from adscontrol.detect.store import open_findings
 from adscontrol.energy import CHARGER_MIN_W, energy_by_zone
 from adscontrol.rates import LOCAL, all_in_cents, rate_for, rate_period
 from adscontrol.zones import list_zones, zone_power
@@ -63,6 +64,7 @@ async def live(request: Request) -> dict:
         zones = await list_zones(session)
         rate = await rate_for(session, now.astimezone(LOCAL).date())
         month = await energy_by_zone(session, _month_start(now), now)
+        flags = await open_findings(session)
         recent = (await session.execute(_RECENT, {"since": now - CHARGER_WINDOW, "now": now})).all()
 
     as_of = max((r.time for r in rows), default=None)
@@ -97,7 +99,7 @@ async def live(request: Request) -> dict:
                 "watts": watts[z.id],
                 "pin_x": z.pin_x,
                 "pin_y": z.pin_y,
-                "flagged": False,
+                "flagged": bool(flags.get(z.id)),
             }
             for z in circuits
         ],

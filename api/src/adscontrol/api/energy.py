@@ -7,6 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import text
 
+from adscontrol.detect.store import open_findings
 from adscontrol.energy import charger_estimate, energy_by_zone
 from adscontrol.rates import LOCAL
 
@@ -73,6 +74,7 @@ async def zone_detail(zone_id: int, request: Request, range: Range = "bill") -> 
         if zone is None:
             raise HTTPException(status_code=404, detail="no such zone")
         start, end = await _span(request, session, range)
+        flags = (await open_findings(session)).get(zone_id, [])
         rows = (
             await session.execute(
                 text(
@@ -106,5 +108,5 @@ async def zone_detail(zone_id: int, request: Request, range: Range = "bill") -> 
         "name": zone.name,
         "series": series,
         "overnight_min_w": median(nights.values()) if nights else None,
-        "flags": [],
+        "flags": flags,
     }

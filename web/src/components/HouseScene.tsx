@@ -26,6 +26,7 @@ export function HouseScene({
         >
           <span className="pin-name">{zone.name}</span>
           <b>{formatWatts(zone.watts)}</b>
+          {zone.flagged ? <span className="pin-flag">Unusual</span> : null}
         </Link>
       ))}
       <Link className="pin" style={{ left: "88%", top: "66%" }} to="/energy">

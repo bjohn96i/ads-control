@@ -51,6 +51,7 @@ p { margin: 4px 0; }
 .pin.flagged { border-left-color: var(--orange); }
 .pin-name { color: var(--muted); white-space: nowrap; }
 .pin b { color: var(--gold); font-weight: 500; font-size: 15px; }
+.pin-flag { color: var(--orange); font-size: 10px; }
 .side { display: flex; flex-direction: column; gap: 16px; }
 .usage { padding: 18px; border-top: 2px solid var(--orange); }
 .big { font-size: 46px; letter-spacing: -1.5px; line-height: 1.15; margin: 6px 0; }

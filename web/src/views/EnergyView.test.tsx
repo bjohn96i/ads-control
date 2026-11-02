@@ -118,6 +118,13 @@ describe("EnergyView", () => {
     expect(await screen.findByText(/42 W overnight/i)).toBeInTheDocument();
   });
 
+  it("zone_flags_explain_what_is_unusual", async () => {
+    ZONE.flags = [{ kind: "creep", summary: "Typical use has risen from 1.0 to 2.0 kWh a day" }] as never;
+    show(RANKING, "/energy?zone=3");
+    expect(await screen.findByText(/risen from 1\.0 to 2\.0/)).toBeInTheDocument();
+    ZONE.flags = [];
+  });
+
   it("failed_load_says_so", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 500 })));
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
