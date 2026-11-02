@@ -15,19 +15,32 @@ def measured_multiplier(delta_incoming_w: float, delta_channel_w: float) -> floa
     return delta_incoming_w / delta_channel_w
 
 
+class ChangeTracker:
+    """Measures from the last reading before the channel moved, so a load that started
+    earlier for an unrelated reason is not credited to this channel."""
+
+    def __init__(self) -> None:
+        self._channel: float | None = None
+        self._incoming = 0.0
+
+    def update(self, channel_w: float, incoming_w: float) -> tuple[float, float]:
+        if self._channel is None:
+            self._channel = channel_w
+        if abs(channel_w - self._channel) < MIN_CHANNEL_MOVE_W:
+            self._incoming = incoming_w
+        return channel_w - self._channel, incoming_w - self._incoming
+
+
 async def watch(
     client: RefossClient, channel: int, echo: Callable[[str], None], interval_s: float = 5
 ) -> None:
-    """Print the channel and the incoming total, relative to where they started."""
-    base_channel = base_incoming = None
+    """Print the channel and the incoming total, and how far each has moved."""
+    tracker = ChangeTracker()
     while True:
         by_channel = {r.channel: r.power_w for r in await client.read_channels()}
         now_channel = by_channel[channel]
         now_incoming = sum(by_channel[c] for c in INCOMING_CHANNELS)
-        if base_channel is None:
-            base_channel, base_incoming = now_channel, now_incoming
-        delta_channel = now_channel - base_channel
-        delta_incoming = now_incoming - base_incoming
+        delta_channel, delta_incoming = tracker.update(now_channel, now_incoming)
         try:
             multiplier = f"{measured_multiplier(delta_incoming, delta_channel):.2f}"
         except ValueError:
