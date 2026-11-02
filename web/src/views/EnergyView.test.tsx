@@ -68,6 +68,11 @@ describe("EnergyView", () => {
     expect(within(rows[1]).getByText("$21.50")).toBeInTheDocument();
   });
 
+  it("small_amounts_keep_a_decimal_rather_than_rounding_to_nothing", async () => {
+    show({ ...RANKING, zones: [{ id: 3, name: "Dishwasher", ...line(0.43, 0.03, 0.15) }] });
+    expect(await screen.findByText("0.4 kWh")).toBeInTheDocument();
+  });
+
   it("labels_costs_as_estimates", async () => {
     show();
     expect(await screen.findByRole("columnheader", { name: /estimated cost/i })).toBeInTheDocument();

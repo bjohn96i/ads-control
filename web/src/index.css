@@ -110,6 +110,7 @@ button.link { background: none; border-color: transparent; color: var(--muted); 
 button.danger { color: var(--orange); }
 .add-task { max-width: 760px; margin-bottom: 12px; }
 .range { margin: 0 0 14px; }
+.tasks { margin-top: 14px; }
 button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
 .table-scroll { overflow-x: auto; margin-top: 14px; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -120,7 +121,7 @@ td button.link { min-height: 0; padding: 0; color: var(--sage); text-decoration:
 .share i { display: block; height: 100%; background: var(--orange); }
 .zone-panel { margin-top: 14px; }
 .chart { margin-top: 10px; }
-.upload { display: inline-flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 13px; }
+.task-actions label.upload { flex-direction: column; align-items: flex-start; gap: 4px; }
 .toast {
   position: sticky;
   top: 8px;

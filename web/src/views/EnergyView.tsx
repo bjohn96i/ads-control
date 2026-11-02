@@ -27,7 +27,7 @@ const RANGES = [
 ];
 const COVERAGE_WARN = 0.9;
 
-const kwh = (value: number) => `${Math.round(value)} kWh`;
+const kwh = (value: number) => `${value < 10 ? value.toFixed(1) : Math.round(value)} kWh`;
 const dollars = (value: number) => `$${value.toFixed(2)}`;
 
 function Row({ name, line, onOpen }: { name: string; line: EnergyLine; onOpen?: () => void }) {
