@@ -20,11 +20,19 @@ const LIVE = {
   ],
 };
 
-function renderHome(body: unknown, ok = true, next: unknown = null, bill: unknown = null) {
+function renderHome(
+  body: unknown,
+  ok = true,
+  next: unknown = null,
+  bill: unknown = null,
+  climate: unknown[] = [],
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) =>
-      url === "/api/maintenance/next"
+      url === "/api/climate/summary"
+        ? new Response(JSON.stringify({ thermostats: climate }))
+        : url === "/api/maintenance/next"
         ? new Response(JSON.stringify(next))
         : url === "/api/bills/latest"
           ? new Response(JSON.stringify(bill))
@@ -133,6 +141,16 @@ describe("HomeView", () => {
     expect(link).toHaveAttribute("href", "/bills");
   });
 
+  it("strip_shows_both_thermostats_and_links_to_climate", async () => {
+    renderHome(LIVE, true, null, null, [
+      { name: "Upstairs", stale: false, ambient_f: 67.4, setpoint_f: 67 },
+      { name: "Downstairs", stale: true, ambient_f: null, setpoint_f: null },
+    ]);
+    const link = await screen.findByRole("link", { name: /Upstairs 67° → 67°/ });
+    expect(link).toHaveTextContent("Downstairs: no recent reading");
+    expect(link).toHaveAttribute("href", "/climate");
+  });
+
   it("flagged_zone_says_so_in_words", async () => {
     renderHome({ ...LIVE, zones: [{ ...LIVE.zones[0], flagged: true }] });
     const pin = await screen.findByRole("link", { name: /Dishwasher/ });
@@ -142,6 +160,6 @@ describe("HomeView", () => {
   it("camera_tiles_and_strip_say_not_connected_yet", async () => {
     renderHome(LIVE);
     await screen.findByRole("link", { name: /Dishwasher/ });
-    expect(screen.getAllByText(/not connected yet/i).length).toBeGreaterThanOrEqual(5);
+    expect(screen.getAllByText(/not connected yet/i).length).toBeGreaterThanOrEqual(4);
   });
 });

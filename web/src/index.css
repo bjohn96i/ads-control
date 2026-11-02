@@ -111,6 +111,7 @@ button.danger { color: var(--orange); }
 .add-task { max-width: 760px; margin-bottom: 12px; }
 .range { margin: 0 0 14px; }
 .tasks { margin-top: 14px; }
+.tasks.climate { max-width: none; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); }
 button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
 .table-scroll { overflow-x: auto; margin-top: 14px; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }

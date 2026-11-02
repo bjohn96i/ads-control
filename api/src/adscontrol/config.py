@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: SecretStr = SecretStr("")
     sdm_project_id: str = ""
+    weather_lat: float | None = None
+    weather_lon: float | None = None
     nest_token_path: Path = ROOT_DIR / "data" / "nest_token"
 
 

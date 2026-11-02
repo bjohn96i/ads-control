@@ -1,16 +1,18 @@
 import { Link, Route, Routes } from "react-router-dom";
 import { BillsView } from "./views/BillsView";
+import { ClimateView } from "./views/ClimateView";
 import { EnergyView } from "./views/EnergyView";
 import { HomeView } from "./views/HomeView";
 import { MaintenanceView } from "./views/MaintenanceView";
 
-const LATER = [ "climate", "cameras"];
+const LATER = ["cameras"];
 
 export function App() {
   return (
     <Routes>
       <Route path="/" element={<HomeView />} />
       <Route path="/bills" element={<BillsView />} />
+      <Route path="/climate" element={<ClimateView />} />
       <Route path="/energy" element={<EnergyView />} />
       <Route path="/maintenance" element={<MaintenanceView />} />
       {LATER.map((page) => (

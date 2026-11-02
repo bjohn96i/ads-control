@@ -128,7 +128,7 @@ async def test_session_expires_after_90_days(api, clock):
 @pytest.mark.parametrize("cookie", ["garbage", "1.9999999999.abc", "", "a.b.c.d"])
 async def test_forged_cookie_is_rejected(session, migrated_db, clock, api, cookie):
     async with _client(migrated_db, clock) as fresh:
-        fresh.cookies.set("control_session", cookie, domain="t")
+        fresh.headers["cookie"] = f"control_session={cookie}"
         assert (await fresh.get("/api/auth/check")).status_code == 401
 
 
@@ -139,6 +139,16 @@ async def test_tampered_expiry_is_rejected(api, migrated_db, clock):
         fresh.cookies.set(
             "control_session", f"{generation}.{int(expires) + 999}.{signature}", domain="t"
         )
+        assert (await fresh.get("/api/auth/check")).status_code == 401
+
+
+async def test_cookie_signed_with_another_key_is_rejected(api, migrated_db, clock, session):
+    await _enter(api)
+    value = api.cookies["control_session"]
+    await session.execute(text("UPDATE auth_settings SET signing_key = :k"), {"k": b"x" * 32})
+    await session.commit()
+    async with _client(migrated_db, clock) as fresh:
+        fresh.headers["cookie"] = f"control_session={value}"
         assert (await fresh.get("/api/auth/check")).status_code == 401
 
 

@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from adscontrol.api import auth, bills, energy, health, live, maintenance
+from adscontrol.api import auth, bills, climate, energy, health, live, maintenance
 from adscontrol.config import ROOT_DIR, Settings, get_settings
 from adscontrol.db.engine import create_engine, make_session_factory
 from adscontrol.detect.store import run_detection
@@ -18,6 +18,7 @@ from adscontrol.nest.sdm import SdmClient
 from adscontrol.nest.thermostat import NEST_INTERVAL_S, ThermostatRecorder
 from adscontrol.refoss.recorder import SAMPLE_INTERVAL_S, Recorder
 from adscontrol.scheduler import Job, Scheduler, SourceState
+from adscontrol.weather import WEATHER_INTERVAL_S, WeatherRecorder
 
 DETECT_INTERVAL_S = 900
 
@@ -33,6 +34,14 @@ def create_app(
     settings = settings or get_settings()
     engine = create_engine(settings.database_url)
     sessions = make_session_factory(engine)
+    sdm = None
+    if settings.google_client_id and settings.sdm_project_id:
+        sdm = SdmClient(
+            settings.google_client_id,
+            settings.google_client_secret.get_secret_value(),
+            settings.sdm_project_id,
+            settings.nest_token_path,
+        )
     if jobs is None:
         recorder = Recorder(settings.refoss_host, sessions)
 
@@ -44,14 +53,11 @@ def create_app(
             Job("refoss", SAMPLE_INTERVAL_S, recorder.poll),
             Job("detect", DETECT_INTERVAL_S, detect),
         ]
-        if settings.google_client_id and settings.sdm_project_id:
-            sdm = SdmClient(
-                settings.google_client_id,
-                settings.google_client_secret.get_secret_value(),
-                settings.sdm_project_id,
-                settings.nest_token_path,
-            )
+        if sdm is not None:
             jobs.append(Job("nest", NEST_INTERVAL_S, ThermostatRecorder(sdm, sessions).poll))
+        if settings.weather_lat is not None and settings.weather_lon is not None:
+            weather = WeatherRecorder(settings.weather_lat, settings.weather_lon, sessions)
+            jobs.append(Job("weather", WEATHER_INTERVAL_S, weather.poll))
     states = {j.name: SourceState(j.interval_s) for j in jobs}
 
     async def _db_check() -> bool:
@@ -73,6 +79,7 @@ def create_app(
 
     app = FastAPI(title="ADS-Control", lifespan=lifespan)
     app.state.settings = settings
+    app.state.sdm = sdm
     app.state.sessions = sessions
     app.state.source_states = states
     app.state.db_check = db_check or _db_check
@@ -81,6 +88,7 @@ def create_app(
     app.include_router(live.router)
     app.include_router(auth.router)
     app.include_router(energy.router)
+    app.include_router(climate.router)
     app.include_router(bills.router)
     app.include_router(maintenance.router)
 
