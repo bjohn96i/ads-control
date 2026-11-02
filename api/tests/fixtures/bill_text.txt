@@ -1,0 +1,26 @@
+Customer Name
+TEST CUSTOMER
+Account Number
+00000-00000 Draft Date Nov 13, 2026
+Total Due  $ 248.00
+Current Budget Billing Payment Due + 248.00
+Total kWh Used
+Billing Period:  Sep 24, 2026 - Oct 23, 2026
+Service Period Meter # Current           -          Previous
+Offpk kWh 2777 2294 1
+Onpk kWh 556 526 1
+Tot kWh 6225 5167 1
+SuperOffPkKWH 2892 2346 1
+Current Service                                                       $ 126.46
+Environmental Compliance Cost                                         11.02
+Municipal Franchise Fee                                               1.65
+Sales Tax                                                             11.13
+Total Current Electric Service   $ 150.26
+Current Actual Amount
+Total Difference
+$ 150.26
+$ 248.00
+- $ 97.74
+- $ 162.39
+- $ 260.13
+Current Budget Billing Payment  $ 248.00

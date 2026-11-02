@@ -1,6 +1,6 @@
 """Where the power goes: zones ranked by energy and estimated cost, and one zone's detail."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from statistics import median
 from typing import Literal
 
@@ -17,6 +17,12 @@ Range = Literal["bill", "7d", "30d"]
 
 async def _span(request: Request, session, range_: str) -> tuple[datetime, datetime]:
     now: datetime = request.app.state.clock()
+    if range_ == "bill":
+        last_end = await session.scalar(text("SELECT max(period_end) FROM bills"))
+        if last_end is not None:
+            start = datetime.combine(last_end + timedelta(days=1), time.min, tzinfo=LOCAL)
+            if start < now:
+                return start, now
     days = 7 if range_ == "7d" else 30
     # Whole hours, so the rollups' first bucket is not a partial one.
     start = (now - timedelta(days=days)).replace(minute=0, second=0, microsecond=0)

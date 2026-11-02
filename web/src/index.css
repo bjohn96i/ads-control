@@ -120,6 +120,7 @@ td button.link { min-height: 0; padding: 0; color: var(--sage); text-decoration:
 .share i { display: block; height: 100%; background: var(--orange); }
 .zone-panel { margin-top: 14px; }
 .chart { margin-top: 10px; }
+.upload { display: inline-flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 13px; }
 .toast {
   position: sticky;
   top: 8px;

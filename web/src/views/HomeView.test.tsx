@@ -20,13 +20,15 @@ const LIVE = {
   ],
 };
 
-function renderHome(body: unknown, ok = true, next: unknown = null) {
+function renderHome(body: unknown, ok = true, next: unknown = null, bill: unknown = null) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) =>
       url === "/api/maintenance/next"
         ? new Response(JSON.stringify(next))
-        : new Response(JSON.stringify(body), { status: ok ? 200 : 500 }),
+        : url === "/api/bills/latest"
+          ? new Response(JSON.stringify(bill))
+          : new Response(JSON.stringify(body), { status: ok ? 200 : 500 }),
     ),
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -123,6 +125,12 @@ describe("HomeView", () => {
     renderHome(LIVE);
     const link = await screen.findByRole("link", { name: /Maintenance: nothing scheduled/i });
     expect(link).toHaveAttribute("href", "/maintenance");
+  });
+
+  it("strip_shows_the_last_bill_as_the_actual_charge", async () => {
+    renderHome(LIVE, true, null, { actual_charge: 150.26, budget_payment: 248 });
+    const link = await screen.findByRole("link", { name: /Last bill: \$150\.26 actual/ });
+    expect(link).toHaveAttribute("href", "/bills");
   });
 
   it("flagged_zone_says_so_in_words", async () => {
