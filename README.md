@@ -63,7 +63,8 @@ launchctl load ~/Library/LaunchAgents/org.adscontrol.caddy.plist
 caddy trust                                        # asks for your Mac password
 ```
 
-Add a Local DNS record on the Pi-hole: `control.home.arpa` pointing at this Mac's address. On each
+The address is `https://192.168.4.41` or this Mac's `.local` name (see `deploy/Caddyfile`). Neither needs DNS, so
+they work with iCloud Private Relay on. On each
 phone, install Caddy's root certificate from
 `~/Library/Application Support/Caddy/pki/authorities/local/root.crt` and, on iPhone, turn it on
 under Settings > General > About > Certificate Trust Settings. That certificate lets its holder
