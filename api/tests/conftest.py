@@ -15,7 +15,7 @@ def pg_url():
     if url:
         yield url
         return
-    from testcontainers.postgres import PostgresContainer
+    from testcontainers.community.postgres import PostgresContainer
 
     with PostgresContainer(
         "timescale/timescaledb:2.30.2-pg16", username="test", password="test", dbname="test"

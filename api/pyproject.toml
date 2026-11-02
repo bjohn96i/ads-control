@@ -36,6 +36,7 @@ packages = ["src/adscontrol"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 markers = ["integration: needs a Timescale database (Docker via testcontainers, or TEST_DATABASE_URL)"]
 
