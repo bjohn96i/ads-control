@@ -86,7 +86,7 @@ p { margin: 4px 0; }
 .rooms input { width: 20px; height: 20px; }
 .task-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
 .task-actions label { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
-button, input[type="date"], input[type="number"] {
+button, input[type="date"], input[type="number"], input[type="text"], textarea {
   font: inherit;
   background: #222e20;
   color: var(--text);
@@ -99,6 +99,15 @@ button { cursor: pointer; min-height: 40px; }
 button:hover:not(:disabled) { background: #30402a; }
 button:disabled { color: var(--muted); cursor: default; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.editor { display: grid; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.editor > label, .field { display: grid; gap: 4px; color: var(--muted); font-size: 13px; }
+.editor input[type="text"], .editor textarea { width: 100%; }
+.room-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.room-row input { flex: 1; min-width: 140px; }
+.confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--gold); font-size: 14px; }
+button.link { background: none; border-color: transparent; color: var(--muted); padding-inline: 4px; }
+button.danger { color: var(--orange); }
+.add-task { max-width: 760px; margin-bottom: 12px; }
 .toast {
   position: sticky;
   top: 8px;

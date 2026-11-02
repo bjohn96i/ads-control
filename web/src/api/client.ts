@@ -42,12 +42,21 @@ export type MaintenanceTask = {
   overdue: boolean;
 };
 
+export class ApiError extends Error {
+  constructor(
+    path: string,
+    readonly status: number,
+  ) {
+    super(`${path} answered ${status}`);
+  }
+}
+
 export async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, {
     method,
     headers: { "Content-Type": "application/json", "X-Control-Action": "1" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!response.ok) throw new Error(`${path} answered ${response.status}`);
+  if (!response.ok) throw new ApiError(path, response.status);
   return (response.status === 204 ? null : await response.json()) as T;
 }

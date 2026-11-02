@@ -188,30 +188,148 @@ describe("MaintenanceView", () => {
     await waitFor(() => expect(calls[0]?.body.done_on).toBe("2026-10-31"));
   });
 
+  async function editor(name: string) {
+    const card = await row(name);
+    fireEvent.click(card.getByRole("button", { name: /^edit$/i }));
+    return card;
+  }
+
   it("repeat_interval_can_be_set", async () => {
     show();
-    const repeat = (await row("Fridge Filter")).getByLabelText(/repeat every/i);
-    fireEvent.change(repeat, { target: { value: "6" } });
-    fireEvent.blur(repeat);
+    const card = await editor("Fridge Filter");
+    fireEvent.change(card.getByLabelText(/repeat every/i), { target: { value: "6" } });
+    fireEvent.click(card.getByRole("button", { name: /save changes/i }));
     await waitFor(() => expect(calls[0]?.body).toEqual({ interval_months: 6 }));
     expect(calls[0].url).toBe("/api/maintenance/2");
+    expect(calls[0].method).toBe("PATCH");
   });
 
   it("repeat_interval_can_be_cleared", async () => {
     show();
-    const repeat = (await row("HVAC Filters")).getByLabelText(/repeat every/i);
-    fireEvent.change(repeat, { target: { value: "" } });
-    fireEvent.blur(repeat);
+    const card = await editor("HVAC Filters");
+    fireEvent.change(card.getByLabelText(/repeat every/i), { target: { value: "" } });
+    fireEvent.click(card.getByRole("button", { name: /save changes/i }));
     await waitFor(() => expect(calls[0]?.body).toEqual({ interval_months: null }));
   });
 
-  it("unchanged_or_invalid_repeat_saves_nothing", async () => {
+  it("invalid_repeat_explains_and_saves_nothing", async () => {
     show();
-    const repeat = (await row("HVAC Filters")).getByLabelText(/repeat every/i);
-    fireEvent.blur(repeat);
-    fireEvent.change(repeat, { target: { value: "0" } });
-    fireEvent.blur(repeat);
+    const card = await editor("HVAC Filters");
+    fireEvent.change(card.getByLabelText(/repeat every/i), { target: { value: "0" } });
+    fireEvent.click(card.getByRole("button", { name: /save changes/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/whole number/i);
     expect(calls).toHaveLength(0);
+  });
+
+  it("task_can_be_renamed_with_notes_and_category", async () => {
+    show();
+    const card = await editor("Fridge Filter");
+    fireEvent.change(card.getByLabelText(/^name$/i), { target: { value: "Water Filter" } });
+    fireEvent.change(card.getByLabelText(/category/i), { target: { value: "Kitchen" } });
+    fireEvent.change(card.getByLabelText(/notes/i), { target: { value: "Part 123" } });
+    fireEvent.click(card.getByRole("button", { name: /save changes/i }));
+    await waitFor(() =>
+      expect(calls[0]?.body).toEqual({ name: "Water Filter", category: "Kitchen", notes: "Part 123" }),
+    );
+  });
+
+  it("blank_task_name_is_not_saved", async () => {
+    show();
+    const card = await editor("Fridge Filter");
+    fireEvent.change(card.getByLabelText(/^name$/i), { target: { value: "  " } });
+    fireEvent.click(card.getByRole("button", { name: /save changes/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/name/i);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("deleting_a_task_asks_first_and_keep_cancels", async () => {
+    show();
+    const card = await editor("Fridge Filter");
+    fireEvent.click(card.getByRole("button", { name: /delete task/i }));
+    expect(calls).toHaveLength(0);
+    expect(card.getByText(/can.t be undone/i)).toBeInTheDocument();
+    fireEvent.click(card.getByRole("button", { name: /keep it/i }));
+    expect(calls).toHaveLength(0);
+    fireEvent.click(card.getByRole("button", { name: /delete task/i }));
+    fireEvent.click(card.getByRole("button", { name: /yes, delete/i }));
+    await waitFor(() => expect(calls[0]?.method).toBe("DELETE"));
+    expect(calls[0].url).toBe("/api/maintenance/2");
+  });
+
+  it("room_can_be_added", async () => {
+    show();
+    const card = await editor("HVAC Filters");
+    fireEvent.change(card.getByLabelText(/new room/i), { target: { value: "Attic" } });
+    fireEvent.click(card.getByRole("button", { name: /add room/i }));
+    await waitFor(() => expect(calls[0]?.body).toEqual({ name: "Attic" }));
+    expect(calls[0].url).toBe("/api/maintenance/1/items");
+  });
+
+  it("room_can_be_renamed", async () => {
+    show();
+    const card = await editor("HVAC Filters");
+    const gym = card.getByLabelText("Room name: Gym");
+    fireEvent.change(gym, { target: { value: "Home Gym" } });
+    fireEvent.blur(gym);
+    await waitFor(() => expect(calls[0]?.body).toEqual({ name: "Home Gym" }));
+    expect(calls[0].url).toBe("/api/maintenance/items/11");
+  });
+
+  it("unchanged_or_blank_room_name_saves_nothing", async () => {
+    show();
+    const card = await editor("HVAC Filters");
+    const gym = card.getByLabelText("Room name: Gym");
+    fireEvent.blur(gym);
+    fireEvent.change(gym, { target: { value: " " } });
+    fireEvent.blur(gym);
+    expect(calls).toHaveLength(0);
+    expect(gym).toHaveValue("Gym");
+  });
+
+  it("removing_a_room_asks_first", async () => {
+    show();
+    const card = await editor("HVAC Filters");
+    fireEvent.click(card.getByRole("button", { name: "Remove Gym" }));
+    expect(calls).toHaveLength(0);
+    fireEvent.click(card.getByRole("button", { name: /yes, remove/i }));
+    await waitFor(() => expect(calls[0]?.method).toBe("DELETE"));
+    expect(calls[0].url).toBe("/api/maintenance/items/11");
+  });
+
+  it("new_task_can_be_added_with_rooms", async () => {
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: /add a task/i }));
+    fireEvent.change(screen.getByLabelText(/task name/i), { target: { value: "Dryer Vent" } });
+    fireEvent.change(screen.getByLabelText(/new task category/i), { target: { value: "House" } });
+    fireEvent.change(screen.getByLabelText(/new task repeat/i), { target: { value: "12" } });
+    fireEvent.change(screen.getByLabelText(/rooms, one per line/i), {
+      target: { value: "Laundry\n\n  Roof  \n" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save task/i }));
+    await waitFor(() => expect(calls[0]?.url).toBe("/api/maintenance"));
+    expect(calls[0].body).toEqual({
+      name: "Dryer Vent",
+      category: "House",
+      notes: "",
+      interval_months: 12,
+      items: ["Laundry", "Roof"],
+    });
+  });
+
+  it("duplicate_name_gets_a_clear_message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_u: string, init?: RequestInit) =>
+        (init?.method ?? "GET") === "GET"
+          ? new Response(JSON.stringify({ tasks: TASKS }))
+          : new Response("{}", { status: 409 }),
+      ),
+    );
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: /add a task/i }));
+    fireEvent.change(screen.getByLabelText(/task name/i), { target: { value: "Fridge Filter" } });
+    fireEvent.click(screen.getByRole("button", { name: /save task/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/already used/i);
   });
 
   it("failed_save_says_so", async () => {

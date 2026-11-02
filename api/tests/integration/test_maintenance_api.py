@@ -231,3 +231,166 @@ async def test_bad_import_is_422_and_writes_nothing(api, session):
     r = await api.post("/api/maintenance/import", json=body, headers=HEADERS)
     assert r.status_code == 422
     assert await session.scalar(text("SELECT count(*) FROM tasks WHERE name = 'New'")) == 0
+
+
+async def test_add_task_with_rooms(api):
+    r = await api.post(
+        "/api/maintenance",
+        json={
+            "name": "  Dryer Vent ",
+            "category": "House",
+            "notes": "Back wall",
+            "interval_months": 12,
+            "items": ["Laundry", "Roof"],
+        },
+        headers=HEADERS,
+    )
+    assert r.status_code == 201
+    task = await _task(api, "Dryer Vent")
+    assert task["id"] == r.json()["id"]
+    assert task["notes"] == "Back wall"
+    assert [i["name"] for i in task["items"]] == ["Laundry", "Roof"]
+    assert task["last_done"] is None
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"name": "   ", "category": "House"},
+        {"name": "X", "category": ""},
+        {"name": "X", "category": "House", "interval_months": 0},
+        {"name": "X", "category": "House", "items": ["  "]},
+        {"name": "X", "category": "House", "items": ["A", "A"]},
+        {"name": "X" * 121, "category": "House"},
+    ],
+)
+async def test_bad_new_task_is_rejected(api, body):
+    assert (await api.post("/api/maintenance", json=body, headers=HEADERS)).status_code == 422
+
+
+async def test_duplicate_task_name_is_409(api):
+    r = await api.post(
+        "/api/maintenance", json={"name": "Fridge", "category": "House"}, headers=HEADERS
+    )
+    assert r.status_code == 409
+
+
+async def test_rename_and_edit_task_keeps_history(api):
+    fridge = await _task(api, "Fridge")
+    r = await api.patch(
+        f"/api/maintenance/{fridge['id']}",
+        json={"name": "Fridge Filter", "category": "Kitchen", "notes": "Part 123"},
+        headers=HEADERS,
+    )
+    assert r.status_code == 200
+    after = await _task(api, "Fridge Filter")
+    assert (after["category"], after["notes"]) == ("Kitchen", "Part 123")
+    assert after["last_done"] == fridge["last_done"]
+
+
+async def test_rename_to_existing_name_is_409(api):
+    fridge = await _task(api, "Fridge")
+    r = await api.patch(f"/api/maintenance/{fridge['id']}", json={"name": "HVAC"}, headers=HEADERS)
+    assert r.status_code == 409
+
+
+@pytest.mark.parametrize(
+    "body", [{"name": "  "}, {"name": None}, {"category": None}, {"notes": None}]
+)
+async def test_bad_edit_is_rejected(api, body):
+    fridge = await _task(api, "Fridge")
+    assert (
+        await api.patch(f"/api/maintenance/{fridge['id']}", json=body, headers=HEADERS)
+    ).status_code == 422
+
+
+async def test_edit_unknown_task_is_404(api):
+    assert (
+        await api.patch("/api/maintenance/999999", json={"notes": "x"}, headers=HEADERS)
+    ).status_code == 404
+
+
+async def test_delete_task_removes_it_and_its_history(api, session):
+    hvac = await _task(api, "HVAC")
+    assert (await api.delete(f"/api/maintenance/{hvac['id']}", headers=HEADERS)).status_code == 204
+    assert hvac["name"] not in [
+        t["name"] for t in (await api.get("/api/maintenance")).json()["tasks"]
+    ]
+    left = await session.scalar(
+        text("SELECT count(*) FROM completions WHERE task_id = :t"), {"t": hvac["id"]}
+    )
+    assert left == 0
+    assert (await api.delete(f"/api/maintenance/{hvac['id']}", headers=HEADERS)).status_code == 404
+
+
+async def test_add_rename_and_delete_room(api):
+    hvac = await _task(api, "HVAC")
+    r = await api.post(
+        f"/api/maintenance/{hvac['id']}/items", json={"name": "Attic"}, headers=HEADERS
+    )
+    assert r.status_code == 201
+    item_id = r.json()["id"]
+    assert (
+        await api.patch(f"/api/maintenance/items/{item_id}", json={"name": "Loft"}, headers=HEADERS)
+    ).status_code == 200
+    names = [i["name"] for i in (await _task(api, "HVAC"))["items"]]
+    assert "Loft" in names and "Attic" not in names
+    assert (
+        await api.delete(f"/api/maintenance/items/{item_id}", headers=HEADERS)
+    ).status_code == 204
+    assert "Loft" not in [i["name"] for i in (await _task(api, "HVAC"))["items"]]
+
+
+async def test_rename_room_keeps_its_history(api):
+    hvac = await _task(api, "HVAC")
+    gym = next(i for i in hvac["items"] if i["name"] == "Gym")
+    await api.patch(
+        f"/api/maintenance/items/{gym['id']}", json={"name": "Home Gym"}, headers=HEADERS
+    )
+    after = next(i for i in (await _task(api, "HVAC"))["items"] if i["id"] == gym["id"])
+    assert (after["name"], after["last_done"]) == ("Home Gym", gym["last_done"])
+
+
+async def test_never_done_room_added_keeps_task_due_from_first_completion(api):
+    hvac = await _task(api, "HVAC")
+    await api.post(f"/api/maintenance/{hvac['id']}/items", json={"name": "Attic"}, headers=HEADERS)
+    assert (await _task(api, "HVAC"))["next_due"] == hvac["next_due"]
+
+
+async def test_duplicate_room_is_409(api):
+    hvac = await _task(api, "HVAC")
+    gym = next(i for i in hvac["items"] if i["name"] == "Gym")
+    url = f"/api/maintenance/{hvac['id']}/items"
+    assert (await api.post(url, json={"name": "Gym"}, headers=HEADERS)).status_code == 409
+    assert (
+        await api.patch(
+            f"/api/maintenance/items/{gym['id']}", json={"name": "Office"}, headers=HEADERS
+        )
+    ).status_code == 409
+
+
+async def test_room_routes_404_and_reject_blank(api):
+    hvac = await _task(api, "HVAC")
+    assert (
+        await api.post("/api/maintenance/999999/items", json={"name": "A"}, headers=HEADERS)
+    ).status_code == 404
+    assert (
+        await api.post(f"/api/maintenance/{hvac['id']}/items", json={"name": " "}, headers=HEADERS)
+    ).status_code == 422
+    assert (
+        await api.patch("/api/maintenance/items/999999", json={"name": "A"}, headers=HEADERS)
+    ).status_code == 404
+    assert (await api.delete("/api/maintenance/items/999999", headers=HEADERS)).status_code == 404
+
+
+async def test_new_write_routes_need_the_header(api):
+    hvac = await _task(api, "HVAC")
+    assert (
+        await api.post("/api/maintenance", json={"name": "A", "category": "B"})
+    ).status_code == 403
+    assert (await api.delete(f"/api/maintenance/{hvac['id']}")).status_code == 403
+    assert (
+        await api.post(f"/api/maintenance/{hvac['id']}/items", json={"name": "A"})
+    ).status_code == 403
+    assert (await api.patch("/api/maintenance/items/1", json={"name": "A"})).status_code == 403
+    assert (await api.delete("/api/maintenance/items/1")).status_code == 403

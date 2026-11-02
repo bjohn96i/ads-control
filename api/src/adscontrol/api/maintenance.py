@@ -1,11 +1,12 @@
 """The maintenance list: read it, mark things done, undo, and back it up."""
 
 from datetime import date
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, StringConstraints, ValidationError, model_validator
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from adscontrol.maintenance.repo import add_completions, import_tasks, list_tasks
 from adscontrol.rates import LOCAL
@@ -27,9 +28,39 @@ class CompleteIn(BaseModel):
     who: str | None = Field(default=None, max_length=40)
 
 
-class PatchIn(BaseModel):
+Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+
+
+class TaskCreate(BaseModel):
+    name: Name
+    category: Name
+    notes: str = ""
     interval_months: int | None = Field(default=None, gt=0)
-    notes: str | None = None
+    items: list[Name] = []
+
+    @model_validator(mode="after")
+    def rooms_are_unique(self) -> "TaskCreate":
+        if len(set(self.items)) != len(self.items):
+            raise ValueError("each room can only be listed once")
+        return self
+
+
+class PatchIn(BaseModel):
+    name: Name = None  # type: ignore[assignment]  # optional, but never null
+    category: Name = None  # type: ignore[assignment]
+    notes: str = None  # type: ignore[assignment]
+    interval_months: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def only_interval_can_be_null(cls, data: dict) -> dict:
+        if any(data.get(k, "") is None for k in ("name", "category", "notes")):
+            raise ValueError("name, category and notes cannot be null")
+        return data
+
+
+class ItemIn(BaseModel):
+    name: Name
 
 
 def _today(request: Request) -> date:
@@ -100,19 +131,97 @@ async def undo(completion_id: int, request: Request) -> None:
         await session.commit()
 
 
+@router.post("", status_code=201, dependencies=write)
+async def create_task(body: TaskCreate, request: Request) -> dict:
+    async with request.app.state.sessions() as session:
+        try:
+            task_id = await session.scalar(
+                text(
+                    """
+                    INSERT INTO tasks (name, category, notes, interval_months)
+                    VALUES (:name, :category, :notes, :interval_months) RETURNING id
+                    """
+                ),
+                body.model_dump(exclude={"items"}),
+            )
+            for name in body.items:
+                await session.execute(
+                    text("INSERT INTO task_items (task_id, name) VALUES (:t, :n)"),
+                    {"t": task_id, "n": name},
+                )
+            await session.commit()
+        except IntegrityError as exc:
+            raise HTTPException(status_code=409, detail="that name is already used") from exc
+    return {"id": task_id}
+
+
+# Order matters: /items/{id} must be declared ahead of the /{task_id} routes below it.
+@router.patch("/items/{item_id}", dependencies=write)
+async def rename_item(item_id: int, body: ItemIn, request: Request) -> dict:
+    async with request.app.state.sessions() as session:
+        try:
+            result = await session.execute(
+                text("UPDATE task_items SET name = :n WHERE id = :i"),
+                {"n": body.name, "i": item_id},
+            )
+            await session.commit()
+        except IntegrityError as exc:
+            raise HTTPException(status_code=409, detail="that room is already listed") from exc
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="no such room")
+    return {"ok": True}
+
+
+@router.delete("/items/{item_id}", status_code=204, dependencies=write)
+async def delete_item(item_id: int, request: Request) -> None:
+    async with request.app.state.sessions() as session:
+        result = await session.execute(text("DELETE FROM task_items WHERE id = :i"), {"i": item_id})
+        await session.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="no such room")
+
+
+@router.post("/{task_id}/items", status_code=201, dependencies=write)
+async def add_item(task_id: int, body: ItemIn, request: Request) -> dict:
+    async with request.app.state.sessions() as session:
+        if not await session.scalar(text("SELECT 1 FROM tasks WHERE id = :t"), {"t": task_id}):
+            raise HTTPException(status_code=404, detail="no such task")
+        try:
+            item_id = await session.scalar(
+                text("INSERT INTO task_items (task_id, name) VALUES (:t, :n) RETURNING id"),
+                {"t": task_id, "n": body.name},
+            )
+            await session.commit()
+        except IntegrityError as exc:
+            raise HTTPException(status_code=409, detail="that room is already listed") from exc
+    return {"id": item_id}
+
+
 @router.patch("/{task_id}", dependencies=write)
 async def patch(task_id: int, body: PatchIn, request: Request) -> dict:
     fields = body.model_dump(exclude_unset=True)
-    if fields.get("notes", "") is None:
-        raise HTTPException(status_code=422, detail="notes cannot be null")
     async with request.app.state.sessions() as session:
-        for column in fields:  # names come from PatchIn, not from the request
-            await session.execute(
-                text(f"UPDATE tasks SET {column} = :v WHERE id = :t"),
-                {"v": fields[column], "t": task_id},
-            )
-        await session.commit()
+        if not await session.scalar(text("SELECT 1 FROM tasks WHERE id = :t"), {"t": task_id}):
+            raise HTTPException(status_code=404, detail="no such task")
+        try:
+            for column in fields:  # names come from PatchIn, not from the request
+                await session.execute(
+                    text(f"UPDATE tasks SET {column} = :v WHERE id = :t"),
+                    {"v": fields[column], "t": task_id},
+                )
+            await session.commit()
+        except IntegrityError as exc:
+            raise HTTPException(status_code=409, detail="that name is already used") from exc
     return {"ok": True}
+
+
+@router.delete("/{task_id}", status_code=204, dependencies=write)
+async def delete_task(task_id: int, request: Request) -> None:
+    async with request.app.state.sessions() as session:
+        result = await session.execute(text("DELETE FROM tasks WHERE id = :t"), {"t": task_id})
+        await session.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="no such task")
 
 
 @router.get("/export")
