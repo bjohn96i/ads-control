@@ -14,6 +14,8 @@ from adscontrol.api import auth, bills, energy, health, live, maintenance
 from adscontrol.config import ROOT_DIR, Settings, get_settings
 from adscontrol.db.engine import create_engine, make_session_factory
 from adscontrol.detect.store import run_detection
+from adscontrol.nest.sdm import SdmClient
+from adscontrol.nest.thermostat import NEST_INTERVAL_S, ThermostatRecorder
 from adscontrol.refoss.recorder import SAMPLE_INTERVAL_S, Recorder
 from adscontrol.scheduler import Job, Scheduler, SourceState
 
@@ -42,6 +44,14 @@ def create_app(
             Job("refoss", SAMPLE_INTERVAL_S, recorder.poll),
             Job("detect", DETECT_INTERVAL_S, detect),
         ]
+        if settings.google_client_id and settings.sdm_project_id:
+            sdm = SdmClient(
+                settings.google_client_id,
+                settings.google_client_secret.get_secret_value(),
+                settings.sdm_project_id,
+                settings.nest_token_path,
+            )
+            jobs.append(Job("nest", NEST_INTERVAL_S, ThermostatRecorder(sdm, sessions).poll))
     states = {j.name: SourceState(j.interval_s) for j in jobs}
 
     async def _db_check() -> bool:
