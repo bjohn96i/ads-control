@@ -1,12 +1,29 @@
-"""Command line: migrate, serve."""
+"""Command line: migrate, serve, refoss."""
+
+import asyncio
 
 import typer
 import uvicorn
 
 from adscontrol.config import get_settings
 from adscontrol.db.migrate import upgrade_head
+from adscontrol.refoss.client import RefossClient, discover_uuid
 
 app = typer.Typer(no_args_is_help=True)
+refoss = typer.Typer(no_args_is_help=True, help="The Refoss energy monitor.")
+app.add_typer(refoss, name="refoss")
+
+
+@refoss.command("read")
+def refoss_read() -> None:
+    """Read every channel once and print it."""
+
+    async def run() -> None:
+        host = get_settings().refoss_host
+        for r in await RefossClient(host, await discover_uuid(host)).read_channels():
+            typer.echo(f"{r.channel:>2}  {r.power_w:>8.1f} W  {r.voltage_v:>6.1f} V")
+
+    asyncio.run(run())
 
 
 @app.command()
