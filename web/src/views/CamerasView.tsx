@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { type CameraInfo, getJson, send } from "../api/client";
-import { ageText, eventText } from "../components/CameraTile";
+import { type CameraEvent, type CameraInfo, getJson, send } from "../api/client";
+import { CameraEventTable, eventText } from "../components/CameraEvents";
 import { PinGate } from "../components/PinGate";
 
 // Google ends these streams at five minutes and won't extend them on battery cameras.
@@ -74,8 +74,6 @@ function LiveVideo({ camera }: { camera: CameraInfo }) {
     <>
       {state === "live" ? (
         <video ref={video} data-testid="live-video" autoPlay playsInline muted controls />
-      ) : camera.has_image ? (
-        <img src={`/api/cameras/${camera.id}/image?age=${camera.last_event_at}`} alt={`Last event at ${camera.name}`} />
       ) : null}
       {state === "live" ? (
         <button
@@ -111,6 +109,11 @@ export function CamerasView() {
     queryFn: () => getJson<{ cameras: CameraInfo[] }>("/api/cameras"),
     refetchInterval: 30_000,
   });
+  const events = useQuery({
+    queryKey: ["camera-events", 25],
+    queryFn: () => getJson<{ events: CameraEvent[] }>("/api/cameras/events?limit=25"),
+    refetchInterval: 30_000,
+  });
 
   return (
     <main className="home">
@@ -133,14 +136,17 @@ export function CamerasView() {
         {data?.cameras.map((camera) => (
         <article key={camera.id} className="panel task camera-card">
           <h2>{camera.name}</h2>
-          <p className="sub">
-            {eventText(camera)}
-            {camera.image_age_s !== null ? ` · Picture from ${ageText(camera.image_age_s)}` : ""}
-          </p>
+          <p className="sub">{eventText(camera)}</p>
             {auth.data?.unlocked ? <LiveVideo camera={camera} /> : null}
           </article>
         ))}
       </div>
+      {events.data ? (
+        <section className="panel camera-events">
+          <h2>Last 25 camera events</h2>
+          <CameraEventTable events={events.data.events} />
+        </section>
+      ) : null}
     </main>
   );
 }

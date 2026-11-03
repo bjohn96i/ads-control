@@ -56,9 +56,7 @@ def create_app(
         ]
         if sdm is not None:
             jobs.append(Job("nest", NEST_INTERVAL_S, ThermostatRecorder(sdm, sessions).poll))
-            service = CameraService(
-                sdm, settings.google_pubsub_subscription, sessions, settings.camera_image_dir
-            )
+            service = CameraService(sdm, settings.google_pubsub_subscription, sessions)
             jobs.append(Job("cameras", CAMERA_SYNC_S, service.sync))
             if settings.google_pubsub_subscription:
                 jobs.append(Job("camera_events", EVENT_POLL_S, service.poll))

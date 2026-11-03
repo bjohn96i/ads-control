@@ -68,6 +68,6 @@ export type CameraInfo = {
   kind: string;
   last_event: string | null;
   last_event_at: string | null;
-  has_image: boolean;
-  image_age_s: number | null;
 };
+
+export type CameraEvent = { camera_id: number; camera: string; type: string; occurred_at: string };

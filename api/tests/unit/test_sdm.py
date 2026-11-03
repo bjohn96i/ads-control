@@ -159,7 +159,6 @@ def test_client_has_no_schedule_method():
         "list_cameras",
         "generate_stream",
         "stop_stream",
-        "fetch_clip",
         "pull_events",
         "ack_events",
     }
@@ -355,39 +354,6 @@ async def test_stop_stream_names_the_session(tmp_path):
     body = json.loads(route.calls[0].request.content)
     assert body["command"].endswith("StopWebRtcStream")
     assert body["params"] == {"mediaSessionId": "s1"}
-
-
-CLIP_URL = "https://nest-camera-frontend.googleapis.com/frontend/encoded/clip"
-
-
-@respx.mock
-async def test_preview_clip_downloads_with_the_access_token(tmp_path):
-    _token()
-    clip = respx.get(CLIP_URL).mock(return_value=httpx.Response(200, content=b"mp4bytes"))
-    assert await _client(tmp_path).fetch_clip(CLIP_URL) == b"mp4bytes"
-    assert clip.calls[0].request.headers["authorization"] == "Bearer access-1"
-
-
-@respx.mock
-async def test_preview_clip_from_another_host_never_gets_the_token(tmp_path):
-    token = _token()
-    other = respx.get(url__regex=r".*").mock(return_value=httpx.Response(200, content=b"x"))
-    for url in [
-        "https://evil.example/clip",
-        "https://evilgoogleapis.com/c",
-        "http://x.googleapis.com/c",
-    ]:
-        with pytest.raises(NestError):
-            await _client(tmp_path).fetch_clip(url)
-    assert not token.called and not other.called
-
-
-@respx.mock
-async def test_failed_clip_download_is_a_nest_error(tmp_path):
-    _token()
-    respx.get(CLIP_URL).mock(return_value=httpx.Response(410))
-    with pytest.raises(NestError):
-        await _client(tmp_path).fetch_clip(CLIP_URL)
 
 
 SUBSCRIPTION = "projects/p/subscriptions/s"

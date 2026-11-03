@@ -5,8 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CamerasView, LIVE_LIMIT_MS } from "./CamerasView";
 
 const CAMERAS = [
-  { id: 7, name: "Backyard camera", kind: "camera", last_event: "motion", last_event_at: "2026-11-02T19:14:00Z", has_image: true, image_age_s: 60 },
-  { id: 8, name: "Living Room Display", kind: "display", last_event: null, last_event_at: null, has_image: false, image_age_s: null },
+  { id: 7, name: "Backyard camera", kind: "camera", last_event: "motion", last_event_at: "2026-11-02T19:14:00Z" },
+  { id: 8, name: "Living Room Display", kind: "display", last_event: null, last_event_at: null },
+];
+
+const EVENTS = [
+  { camera_id: 7, camera: "Backyard camera", type: "motion", occurred_at: "2026-11-02T19:14:00Z" },
 ];
 
 class FakePeer {
@@ -36,6 +40,7 @@ function show({ unlocked = true, liveStatus = 200 } = {}) {
       const method = init?.method ?? "GET";
       if (method === "GET") {
         if (url === "/api/auth/status") return new Response(JSON.stringify({ pin_set: true, unlocked }));
+        if (url === "/api/cameras/events?limit=25") return new Response(JSON.stringify({ events: EVENTS }));
         return new Response(JSON.stringify({ cameras: CAMERAS }));
       }
       posts.push({ url, method, body: init?.body ? JSON.parse(init.body as string) : null });
@@ -148,5 +153,14 @@ describe("CamerasView", () => {
     const video = await c.findByTestId("live-video");
     expect((video as HTMLVideoElement).muted).toBe(true);
     expect(video).toHaveAttribute("controls");
+  });
+
+  it("lists_the_last_25_camera_events", async () => {
+    show();
+    const table = await screen.findByRole("table");
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]).getByText("Motion")).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 });

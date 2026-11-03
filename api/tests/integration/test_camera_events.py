@@ -31,27 +31,20 @@ def payload(
     }
 
 
-CLIP_URL = "https://nest-camera-frontend.googleapis.com/clip"
-
-
-def clip(device="door1", at=NOW - timedelta(seconds=5), *, with_event=True):
+def clip(device="door1", at=NOW - timedelta(seconds=5)):
+    """A doorbell motion event with its preview clip, as the doorbell sends them."""
     message = payload("CameraMotion.Motion", f"m{at.timestamp()}", device, at)
-    events = message["resourceUpdate"]["events"]
-    if not with_event:
-        events.clear()
-    events["sdm.devices.events.CameraClipPreview.ClipPreview"] = {
+    message["resourceUpdate"]["events"]["sdm.devices.events.CameraClipPreview.ClipPreview"] = {
         "eventSessionId": "s",
-        "previewUrl": CLIP_URL,
+        "previewUrl": "https://nest-camera-frontend.googleapis.com/clip",
     }
     return message
 
 
 class FakeSdm:
-    def __init__(self, messages=(), clip=None, cameras=None):
+    def __init__(self, messages=(), cameras=None):
         self.messages = list(messages)
-        self.clip = clip
         self.acked = []
-        self.clips = []
         self.streams = []
         self.stopped = []
         self.stream_error = None
@@ -69,12 +62,6 @@ class FakeSdm:
 
     async def ack_events(self, subscription, ack_ids):
         self.acked.extend(ack_ids)
-
-    async def fetch_clip(self, url):
-        self.clips.append(url)
-        if isinstance(self.clip, Exception):
-            raise self.clip
-        return self.clip
 
     async def generate_stream(self, device_id, offer):
         if self.stream_error:
@@ -95,7 +82,7 @@ async def clean(session):
 
 
 def _service(engine, sdm, tmp_path):
-    return CameraService(sdm, "sub", async_sessionmaker(engine), tmp_path)
+    return CameraService(sdm, "sub", async_sessionmaker(engine))
 
 
 async def _ready(engine, sdm, tmp_path):
@@ -105,9 +92,7 @@ async def _ready(engine, sdm, tmp_path):
 
 
 async def _app_client(session, url, sdm, tmp_path, *, unlocked=True):
-    app = create_app(
-        Settings(database_url=url, camera_image_dir=tmp_path), jobs=[], start_jobs=False
-    )
+    app = create_app(Settings(database_url=url), jobs=[], start_jobs=False)
     app.state.clock = lambda: NOW
     app.state.sdm = sdm
     client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://t")
@@ -174,80 +159,30 @@ async def test_sync_adds_cameras_and_keeps_names_current(engine, session, clean,
     assert rows == ["Renamed", "Entryway doorbell"]
 
 
-async def _image_of(session, tmp_path, device="door1"):
-    camera_id = await session.scalar(
-        text("SELECT id FROM cameras WHERE device_id = :d"), {"d": device}
-    )
-    path = tmp_path / f"{camera_id}.jpg"
-    return path.read_bytes() if path.exists() else None
-
-
 async def test_event_is_recorded_and_acknowledged(engine, session, clean, tmp_path):
     sdm = FakeSdm([("a1", payload())])
     service = await _ready(engine, sdm, tmp_path)
     await service.poll()
     assert sdm.acked == ["a1"]
     assert await session.scalar(text("SELECT count(*) FROM camera_events")) == 1
-    assert sdm.clips == []
 
 
-async def test_doorbell_preview_clip_becomes_its_picture(
-    engine, session, clean, tmp_path, tiny_mp4
-):
-    sdm = FakeSdm([("a1", clip())], clip=tiny_mp4)
+async def test_doorbell_clip_is_not_downloaded_or_counted(engine, session, clean, tmp_path):
+    # FakeSdm has no download method, so any attempt to fetch the clip would fail here.
+    sdm = FakeSdm([("a1", clip())])
     service = await _ready(engine, sdm, tmp_path)
     await service.poll()
-    assert sdm.clips == [CLIP_URL]
-    assert (await _image_of(session, tmp_path))[:2] == b"\xff\xd8"
-    # the clip is the event's picture, not an event of its own
-    assert await session.scalar(text("SELECT count(*) FROM camera_events")) == 1
-
-
-async def test_clip_in_a_message_of_its_own_still_sets_the_picture(
-    engine, session, clean, tmp_path, tiny_mp4
-):
-    sdm = FakeSdm([("a1", clip(with_event=False))], clip=tiny_mp4)
-    service = await _ready(engine, sdm, tmp_path)
-    await service.poll()
-    assert await _image_of(session, tmp_path) is not None
     assert sdm.acked == ["a1"]
+    assert await session.scalar(text("SELECT count(*) FROM camera_events")) == 1
+    assert list(tmp_path.iterdir()) == []
 
 
-async def test_duplicate_pubsub_event_recorded_once(engine, session, clean, tmp_path, tiny_mp4):
-    sdm = FakeSdm([("a1", clip()), ("a2", clip())], clip=tiny_mp4)
+async def test_duplicate_pubsub_event_recorded_once(engine, session, clean, tmp_path):
+    sdm = FakeSdm([("a1", clip()), ("a2", clip())])
     service = await _ready(engine, sdm, tmp_path)
     await service.poll()
     assert await session.scalar(text("SELECT count(*) FROM camera_events")) == 1
-    assert len(sdm.clips) == 1
     assert sdm.acked == ["a1", "a2"]
-
-
-@pytest.mark.parametrize("failure", [NestError("expired"), b"not a video"])
-async def test_failed_clip_keeps_the_old_picture_and_still_records(
-    engine, session, clean, tmp_path, tiny_mp4, caplog, failure
-):
-    sdm = FakeSdm([("a1", clip(at=NOW - timedelta(seconds=9)))], clip=tiny_mp4)
-    service = await _ready(engine, sdm, tmp_path)
-    await service.poll()
-    before = await _image_of(session, tmp_path)
-    sdm.clip = failure
-    sdm.messages = [("a2", clip(at=NOW))]
-    await service.poll()
-    assert await _image_of(session, tmp_path) == before
-    assert await session.scalar(text("SELECT count(*) FROM camera_events")) == 2
-    assert sdm.acked == ["a1", "a2"]
-    assert any(r.levelname == "WARNING" and "no image" in r.getMessage() for r in caplog.records)
-
-
-async def test_older_clip_arriving_late_does_not_replace_a_newer_picture(
-    engine, session, clean, tmp_path, tiny_mp4
-):
-    sdm = FakeSdm([("a1", clip(at=NOW - timedelta(seconds=1)))], clip=tiny_mp4)
-    service = await _ready(engine, sdm, tmp_path)
-    await service.poll()
-    sdm.messages = [("a2", clip(at=NOW - timedelta(seconds=10)))]
-    await service.poll()
-    assert sdm.clips == [CLIP_URL]
 
 
 def test_clip_previews_are_not_logged_as_ignored(caplog):
@@ -282,43 +217,61 @@ async def test_unreadable_message_is_acknowledged_not_retried_forever(
     assert sdm.acked == ["a1"]
 
 
-async def test_list_shows_last_event_and_image_age(
-    engine, session, clean, tmp_path, migrated_db, tiny_mp4
-):
-    sdm = FakeSdm([("a1", payload("CameraPerson.Person")), ("a2", clip())], clip=tiny_mp4)
+async def test_list_shows_each_cameras_last_event(engine, session, clean, tmp_path, migrated_db):
+    sdm = FakeSdm([("a1", payload("CameraPerson.Person"))])
     await (await _ready(engine, sdm, tmp_path)).poll()
     async with await _app_client(session, migrated_db, sdm, tmp_path, unlocked=False) as c:
         cameras = (await c.get("/api/cameras")).json()["cameras"]
     backyard = next(x for x in cameras if x["name"] == "Backyard camera")
     assert backyard["last_event"] == "person"
     assert backyard["last_event_at"].startswith("2026-11-02T16:00:05")
-    assert (backyard["has_image"], backyard["image_age_s"]) == (False, None)
+    assert "has_image" not in backyard
     doorbell = next(x for x in cameras if x["name"] == "Entryway doorbell")
-    assert (doorbell["last_event"], doorbell["has_image"]) == ("motion", True)
-    assert doorbell["image_age_s"] == pytest.approx(5)
+    assert doorbell["last_event"] is None
 
 
-async def test_image_requires_pin(engine, session, clean, tmp_path, migrated_db, tiny_mp4):
-    sdm = FakeSdm([("a1", clip())], clip=tiny_mp4)
+async def test_recent_events_newest_first_across_cameras(
+    engine, session, clean, tmp_path, migrated_db
+):
+    sdm = FakeSdm(
+        [
+            ("a1", payload("CameraMotion.Motion", "e1", "cam1", NOW - timedelta(minutes=3))),
+            ("a2", payload("DoorbellChime.Chime", "e2", "door1", NOW - timedelta(minutes=1))),
+            ("a3", payload("CameraPerson.Person", "e3", "cam1", NOW - timedelta(minutes=2))),
+        ]
+    )
     await (await _ready(engine, sdm, tmp_path)).poll()
-    camera_id = await session.scalar(text("SELECT id FROM cameras WHERE device_id = 'door1'"))
     async with await _app_client(session, migrated_db, sdm, tmp_path, unlocked=False) as c:
-        assert (await c.get(f"/api/cameras/{camera_id}/image")).status_code == 401
-    async with await _app_client(session, migrated_db, sdm, tmp_path) as c:
-        r = await c.get(f"/api/cameras/{camera_id}/image")
-        assert r.status_code == 200
-        assert r.content[:2] == b"\xff\xd8"
-        assert r.headers["content-type"] == "image/jpeg"
-        assert "no-store" in r.headers["cache-control"]
+        events = (await c.get("/api/cameras/events?limit=2")).json()["events"]
+    assert [(e["camera"], e["type"]) for e in events] == [
+        ("Entryway doorbell", "chime"),
+        ("Backyard camera", "person"),
+    ]
+    assert events[0]["occurred_at"].startswith("2026-11-02T15:59:10")
+    assert isinstance(events[0]["camera_id"], int)
 
 
-async def test_camera_without_an_image_is_404(engine, session, clean, tmp_path, migrated_db):
-    sdm = FakeSdm()
-    await _ready(engine, sdm, tmp_path)
-    camera_id = await session.scalar(text("SELECT id FROM cameras WHERE device_id = 'cam1'"))
-    async with await _app_client(session, migrated_db, sdm, tmp_path) as c:
-        assert (await c.get(f"/api/cameras/{camera_id}/image")).status_code == 404
-        assert (await c.get("/api/cameras/999999/image")).status_code == 404
+async def test_recent_events_default_to_25_and_limit_is_bounded(
+    engine, session, clean, tmp_path, migrated_db
+):
+    sdm = FakeSdm(
+        [
+            (f"a{i}", payload("CameraMotion.Motion", f"e{i}", "cam1", NOW - timedelta(minutes=i)))
+            for i in range(30)
+        ]
+    )
+    await (await _ready(engine, sdm, tmp_path)).poll()
+    async with await _app_client(session, migrated_db, sdm, tmp_path, unlocked=False) as c:
+        assert len((await c.get("/api/cameras/events")).json()["events"]) == 25
+        assert (await c.get("/api/cameras/events?limit=0")).status_code == 422
+        assert (await c.get("/api/cameras/events?limit=101")).status_code == 422
+
+
+def test_no_picture_route_remains(migrated_db):
+    app = create_app(Settings(database_url=migrated_db), jobs=[], start_jobs=False)
+    paths = app.openapi()["paths"]
+    assert "/api/cameras/{camera_id}/live" in paths
+    assert not any("image" in path for path in paths)
 
 
 async def test_live_requires_pin(engine, session, clean, tmp_path, migrated_db):

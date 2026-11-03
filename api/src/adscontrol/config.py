@@ -27,7 +27,6 @@ class Settings(BaseSettings):
     weather_lat: float | None = None
     weather_lon: float | None = None
     google_pubsub_subscription: str = ""
-    camera_image_dir: Path = ROOT_DIR / "data" / "cameras"
     nest_token_path: Path = ROOT_DIR / "data" / "nest_token"
 
 

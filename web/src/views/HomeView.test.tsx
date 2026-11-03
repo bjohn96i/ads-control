@@ -26,15 +26,15 @@ function renderHome(
   next: unknown = null,
   bill: unknown = null,
   climate: unknown[] = [],
-  cameras: unknown[] = [],
+  events: unknown[] = [],
 ) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) =>
       url === "/api/auth/status"
         ? new Response(JSON.stringify({ pin_set: true, unlocked: false }))
-        : url === "/api/cameras"
-          ? new Response(JSON.stringify({ cameras }))
+        : url === "/api/cameras/events?limit=5"
+          ? new Response(JSON.stringify({ events }))
           : url === "/api/climate/summary"
         ? new Response(JSON.stringify({ thermostats: climate }))
         : url === "/api/maintenance/next"
@@ -162,13 +162,15 @@ describe("HomeView", () => {
     expect(within(pin).getByText("Unusual")).toBeInTheDocument();
   });
 
-  it("shows_a_tile_for_each_real_camera", async () => {
+  it("shows_recent_camera_events_linking_to_the_camera_page", async () => {
     renderHome(LIVE, true, null, null, [], [
-      { id: 1, name: "Backyard camera", kind: "camera", last_event: null, last_event_at: null, has_image: false, image_age_s: null },
-      { id: 2, name: "Entryway doorbell", kind: "doorbell", last_event: "chime", last_event_at: "2026-11-02T19:14:00Z", has_image: false, image_age_s: null },
+      { camera_id: 2, camera: "Entryway doorbell", type: "chime", occurred_at: "2026-11-02T19:14:00Z" },
+      { camera_id: 1, camera: "Backyard camera", type: "motion", occurred_at: "2026-11-02T19:10:00Z" },
     ]);
-    expect(await screen.findByText("Backyard camera")).toBeInTheDocument();
-    expect(screen.getByText("Entryway doorbell")).toBeInTheDocument();
-    expect(screen.getByText(/doorbell rang/i)).toBeInTheDocument();
+    expect(await screen.findByText("Entryway doorbell")).toBeInTheDocument();
+    expect(screen.getByText("Doorbell rang")).toBeInTheDocument();
+    const panel = screen.getByText("Backyard camera").closest("a")!;
+    expect(panel).toHaveAttribute("href", "/cameras");
+    expect(within(panel).queryByRole("img")).not.toBeInTheDocument();
   });
 });

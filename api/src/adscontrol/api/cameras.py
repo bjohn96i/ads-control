@@ -1,7 +1,6 @@
-"""Camera tiles and live video. Google's tokens stay here; the browser sees only the answer."""
+"""Camera events and live video. Google's tokens stay here; the browser sees only the answer."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
@@ -35,12 +34,11 @@ def _sdm(request: Request):
 
 @router.get("")
 async def list_cameras(request: Request) -> dict:
-    now = request.app.state.clock()
     async with request.app.state.sessions() as session:
         rows = await session.execute(
             text(
                 """
-                SELECT c.id, c.name, c.kind, c.image_at, e.type AS last_event, e.occurred_at AS last_event_at
+                SELECT c.id, c.name, c.kind, e.type AS last_event, e.occurred_at AS last_event_at
                 FROM cameras c LEFT JOIN LATERAL (
                     SELECT type, occurred_at FROM camera_events
                     WHERE camera_id = c.id ORDER BY occurred_at DESC LIMIT 1
@@ -58,20 +56,26 @@ async def list_cameras(request: Request) -> dict:
                 "kind": c.kind,
                 "last_event": c.last_event,
                 "last_event_at": c.last_event_at,
-                "has_image": c.image_at is not None,
-                "image_age_s": (now - c.image_at).total_seconds() if c.image_at else None,
             }
             for c in cameras
         ]
     }
 
 
-@router.get("/{camera_id}/image", dependencies=[Depends(require_pin)])
-async def image(camera_id: int, request: Request) -> FileResponse:
-    path = request.app.state.settings.camera_image_dir / f"{camera_id}.jpg"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="no image yet")
-    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+@router.get("/events")
+async def recent_events(request: Request, limit: int = Query(25, ge=1, le=100)) -> dict:
+    async with request.app.state.sessions() as session:
+        rows = await session.execute(
+            text(
+                """
+                SELECT e.camera_id, c.name AS camera, e.type, e.occurred_at
+                FROM camera_events e JOIN cameras c ON c.id = e.camera_id
+                ORDER BY e.occurred_at DESC LIMIT :n
+                """
+            ),
+            {"n": limit},
+        )
+        return {"events": [dict(r._mapping) for r in rows]}
 
 
 @router.post("/{camera_id}/live", dependencies=guarded)

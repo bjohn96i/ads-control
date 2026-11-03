@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { type CameraInfo, getJson, type Live } from "../api/client";
-import { CameraTile } from "../components/CameraTile";
+import { Link } from "react-router-dom";
+import { type CameraEvent, getJson, type Live } from "../api/client";
+import { CameraEventTable } from "../components/CameraEvents";
 import { HouseScene } from "../components/HouseScene";
 import { StatusStrip } from "../components/StatusStrip";
 import { UsagePanel } from "../components/UsagePanel";
@@ -12,14 +13,10 @@ export function HomeView() {
     refetchInterval: 5000,
   });
 
-  const cameras = useQuery({
-    queryKey: ["cameras"],
-    queryFn: () => getJson<{ cameras: CameraInfo[] }>("/api/cameras"),
+  const events = useQuery({
+    queryKey: ["camera-events", 5],
+    queryFn: () => getJson<{ events: CameraEvent[] }>("/api/cameras/events?limit=5"),
     refetchInterval: 30_000,
-  });
-  const auth = useQuery({
-    queryKey: ["auth-status"],
-    queryFn: () => getJson<{ unlocked: boolean }>("/api/auth/status"),
   });
 
   return (
@@ -34,11 +31,12 @@ export function HomeView() {
           <HouseScene zones={data.zones} chargerWatts={data.charger_estimate_w} />
           <div className="side">
             <UsagePanel live={data} />
-            <div className="cameras">
-              {cameras.data?.cameras.map((camera) => (
-                <CameraTile key={camera.id} camera={camera} unlocked={auth.data?.unlocked ?? false} />
-              ))}
-            </div>
+            {events.data ? (
+              <Link className="panel camera-events" to="/cameras">
+                <div className="eyebrow">RECENT CAMERA EVENTS</div>
+                <CameraEventTable events={events.data.events} />
+              </Link>
+            ) : null}
           </div>
         </div>
       ) : null}

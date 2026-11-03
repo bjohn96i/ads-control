@@ -55,25 +55,10 @@ p { margin: 4px 0; }
 .side { display: flex; flex-direction: column; gap: 16px; }
 .usage { padding: 18px; border-top: 2px solid var(--orange); }
 .big { font-size: 46px; letter-spacing: -1.5px; line-height: 1.15; margin: 6px 0; }
-.cameras { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex: 1; }
-.camera {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  position: relative;
-  min-height: 104px;
-  padding: 10px;
-  overflow: hidden;
-  color: var(--text);
-  text-decoration: none;
-  background: linear-gradient(150deg, #26302a, #141b15);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-.camera:hover { border-color: var(--gold); }
-.camera img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.75; }
-.camera > span { position: relative; text-shadow: 0 1px 3px #000; }
-.camera-card img, .camera-card video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; margin: 8px 0; border-radius: 4px; background: #0c120c; }
+.camera-events { display: block; padding: 14px 16px; color: var(--text); text-decoration: none; }
+a.camera-events:hover { border-color: var(--gold); }
+.camera-events h2 { margin: 0; font-size: 16px; }
+.camera-card video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; margin: 8px 0; border-radius: 4px; background: #0c120c; }
 .strip {
   display: flex;
   flex-wrap: wrap;
