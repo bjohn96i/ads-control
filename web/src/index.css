@@ -57,6 +57,10 @@ p { margin: 4px 0; }
 .big { font-size: 46px; letter-spacing: -1.5px; line-height: 1.15; margin: 6px 0; }
 .camera-events { display: block; padding: 14px 16px; color: var(--text); text-decoration: none; }
 a.camera-events:hover { border-color: var(--gold); }
+.network { padding: 14px 16px; }
+.network-globe { height: 200px; cursor: pointer; }
+.noisiest { margin: 8px 0 0; padding-left: 20px; font-size: 14px; }
+.noisiest li { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 3px 0; }
 .camera-events h2 { margin: 0; font-size: 16px; }
 .camera-card video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; margin: 8px 0; border-radius: 4px; background: #0c120c; }
 .strip {

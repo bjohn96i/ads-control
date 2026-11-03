@@ -33,6 +33,8 @@ function renderHome(
     vi.fn(async (url: string) =>
       url === "/api/auth/status"
         ? new Response(JSON.stringify({ pin_set: true, unlocked: false }))
+        : url === "/api/network"
+          ? new Response(JSON.stringify({ top_devices: [{ id: "tv", name: "Living Room TV", device_type: "iot", queries: 10, blocked: 1 }], arcs: [], home: null }))
         : url === "/api/cameras/events?limit=5"
           ? new Response(JSON.stringify({ events }))
           : url === "/api/climate/summary"
@@ -172,5 +174,10 @@ describe("HomeView", () => {
     const panel = screen.getByText("Backyard camera").closest("a")!;
     expect(panel).toHaveAttribute("href", "/cameras");
     expect(within(panel).queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("shows_lanthorns_noisiest_devices", async () => {
+    renderHome(LIVE);
+    expect(await screen.findByRole("link", { name: "Living Room TV" })).toBeInTheDocument();
   });
 });

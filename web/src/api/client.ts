@@ -71,3 +71,19 @@ export type CameraInfo = {
 };
 
 export type CameraEvent = { camera_id: number; camera: string; type: string; occurred_at: string };
+
+export type NetworkArc = {
+  lat: number;
+  lon: number;
+  country_code: string;
+  country: string;
+  queries: number;
+  blocked: number;
+  state: string;
+};
+
+export type Network = {
+  top_devices: { id: string; name: string; device_type: string; queries: number; blocked: number }[];
+  arcs: NetworkArc[];
+  home: { lat: number; lon: number } | null;
+};

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { type CameraEvent, getJson, type Live } from "../api/client";
 import { CameraEventTable } from "../components/CameraEvents";
 import { HouseScene } from "../components/HouseScene";
+import { NetworkPanel } from "../components/network/NetworkPanel";
 import { StatusStrip } from "../components/StatusStrip";
 import { UsagePanel } from "../components/UsagePanel";
 
@@ -37,6 +38,7 @@ export function HomeView() {
                 <CameraEventTable events={events.data.events} />
               </Link>
             ) : null}
+            <NetworkPanel />
           </div>
         </div>
       ) : null}
