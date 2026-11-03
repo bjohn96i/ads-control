@@ -40,6 +40,11 @@ function show({ unlocked = true, liveStatus = 200 } = {}) {
       const method = init?.method ?? "GET";
       if (method === "GET") {
         if (url === "/api/auth/status") return new Response(JSON.stringify({ pin_set: true, unlocked }));
+        if (url === "/api/traffic")
+          return new Response(JSON.stringify({ cameras: [
+            { nickname: "Pool Turtle", name: "SR 154 at SR 12", image_url: "https://511ga.org/map/Cctv/24030", home: true },
+            { nickname: "QT Exit 2", name: "I-285 CCW", image_url: "https://511ga.org/map/Cctv/21551", home: false },
+          ] }));
         if (url === "/api/cameras/events?limit=25") return new Response(JSON.stringify({ events: EVENTS }));
         return new Response(JSON.stringify({ cameras: CAMERAS }));
       }
@@ -78,10 +83,10 @@ async function card(name: string) {
 describe("CamerasView", () => {
   it("locked_tile_prompts_for_pin", async () => {
     show({ unlocked: false });
-    await card("Backyard camera");
+    const backyard = await card("Backyard camera");
     expect(await screen.findByLabelText(/household pin/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /watch live/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(backyard.queryByRole("img")).not.toBeInTheDocument();
   });
 
   it("click_starts_live_only_on_click", async () => {
@@ -161,6 +166,13 @@ describe("CamerasView", () => {
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(1);
     expect(within(rows[0]).getByText("Motion")).toBeInTheDocument();
-    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("shows_every_traffic_camera_above_the_house_cameras", async () => {
+    show();
+    const turtle = await screen.findByRole("img", { name: /Pool Turtle/ });
+    expect(screen.getByRole("img", { name: /QT Exit 2/ })).toBeInTheDocument();
+    const house = await screen.findByRole("heading", { name: "Backyard camera" });
+    expect(turtle.compareDocumentPosition(house) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

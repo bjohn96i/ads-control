@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     weather_lon: float | None = None
     google_pubsub_subscription: str = ""
     nest_token_path: Path = ROOT_DIR / "data" / "nest_token"
+    traffic_cameras_path: Path = ROOT_DIR / "data" / "traffic_cameras.yaml"
     lanthorn_url: str = "http://localhost:8000"  # the sister network app, for the home page globe
 
 

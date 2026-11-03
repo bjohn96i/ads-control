@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { type CameraEvent, type CameraInfo, getJson, send } from "../api/client";
+import { type CameraEvent, type CameraInfo, getJson, send, type TrafficCamera } from "../api/client";
 import { CameraEventTable, eventText } from "../components/CameraEvents";
 import { PinGate } from "../components/PinGate";
+import { TrafficCams } from "../components/TrafficCams";
 
 // Google ends these streams at five minutes and won't extend them on battery cameras.
 export const LIVE_LIMIT_MS = 5 * 60 * 1000;
@@ -109,6 +110,10 @@ export function CamerasView() {
     queryFn: () => getJson<{ cameras: CameraInfo[] }>("/api/cameras"),
     refetchInterval: 30_000,
   });
+  const traffic = useQuery({
+    queryKey: ["traffic"],
+    queryFn: () => getJson<{ cameras: TrafficCamera[] }>("/api/traffic"),
+  });
   const events = useQuery({
     queryKey: ["camera-events", 25],
     queryFn: () => getJson<{ events: CameraEvent[] }>("/api/cameras/events?limit=25"),
@@ -128,6 +133,12 @@ export function CamerasView() {
         <p className="warn" role="alert">
           Can't reach the house server
         </p>
+      ) : null}
+      {traffic.data?.cameras.length ? (
+        <section>
+          <h2 className="eyebrow">TRAFFIC NEARBY · GEORGIA 511</h2>
+          <TrafficCams cameras={traffic.data.cameras} />
+        </section>
       ) : null}
       {data?.cameras.length === 0 ? <p className="sub">No cameras found yet.</p> : null}
       {/* One PIN box for the page; once unlocked it renders nothing and the video controls appear. */}

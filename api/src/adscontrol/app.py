@@ -20,6 +20,7 @@ from adscontrol.api import (
     live,
     maintenance,
     network,
+    traffic,
 )
 from adscontrol.cameras.service import CAMERA_SYNC_S, EVENT_POLL_S, CameraService
 from adscontrol.config import ROOT_DIR, Settings, get_settings
@@ -108,6 +109,7 @@ def create_app(
     app.include_router(bills.router)
     app.include_router(maintenance.router)
     app.include_router(network.router)
+    app.include_router(traffic.router)
 
     if (web_dir / "index.html").exists():
         if (web_dir / "assets").is_dir():

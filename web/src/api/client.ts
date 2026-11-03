@@ -87,3 +87,5 @@ export type Network = {
   arcs: NetworkArc[];
   home: { lat: number; lon: number } | null;
 };
+
+export type TrafficCamera = { nickname: string; name: string; image_url: string; home: boolean };

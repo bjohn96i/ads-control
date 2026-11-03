@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { type CameraEvent, getJson, type Live } from "../api/client";
+import { type CameraEvent, getJson, type Live, type TrafficCamera } from "../api/client";
 import { CameraEventTable } from "../components/CameraEvents";
 import { HouseScene } from "../components/HouseScene";
 import { NetworkPanel } from "../components/network/NetworkPanel";
 import { StatusStrip } from "../components/StatusStrip";
+import { TrafficCams } from "../components/TrafficCams";
 import { UsagePanel } from "../components/UsagePanel";
 
 export function HomeView() {
@@ -18,6 +19,10 @@ export function HomeView() {
     queryKey: ["camera-events", 5],
     queryFn: () => getJson<{ events: CameraEvent[] }>("/api/cameras/events?limit=5"),
     refetchInterval: 30_000,
+  });
+  const traffic = useQuery({
+    queryKey: ["traffic"],
+    queryFn: () => getJson<{ cameras: TrafficCamera[] }>("/api/traffic"),
   });
 
   return (
@@ -41,6 +46,9 @@ export function HomeView() {
             <NetworkPanel />
           </div>
         </div>
+      ) : null}
+      {traffic.data ? (
+        <TrafficCams cameras={traffic.data.cameras.filter((c) => c.home)} linkTo="/cameras" />
       ) : null}
       <StatusStrip />
     </main>
