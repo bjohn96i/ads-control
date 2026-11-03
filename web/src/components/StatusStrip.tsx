@@ -10,15 +10,13 @@ type ThermostatSummary = {
   setpoint_f: number | null;
 };
 
-function climateText(thermostats: ThermostatSummary[] | undefined): string {
-  if (!thermostats?.length) return "Thermostats: no readings yet";
-  return thermostats
-    .map((t) => {
-      if (t.stale || t.ambient_f === null) return `${t.name}: no recent reading`;
-      const target = t.setpoint_f === null ? "" : ` → ${Math.round(t.setpoint_f)}°`;
-      return `${t.name} ${Math.round(t.ambient_f)}°${target}`;
-    })
-    .join(" · ");
+function climateLines(thermostats: ThermostatSummary[] | undefined): string[] {
+  if (!thermostats?.length) return ["No readings yet"];
+  return thermostats.map((t) => {
+    if (t.stale || t.ambient_f === null) return `${t.name}: no recent reading`;
+    const target = t.setpoint_f === null ? "" : ` → ${Math.round(t.setpoint_f)}°`;
+    return `${t.name} ${Math.round(t.ambient_f)}°${target}`;
+  });
 }
 
 export function StatusStrip() {
@@ -41,14 +39,35 @@ export function StatusStrip() {
 
   return (
     <div className="strip">
-      <Link to="/climate">{climateText(climate.data?.thermostats)}</Link>
-      <Link to="/maintenance">
-        {next.data
-          ? `${next.data.name}: ${dueText(next.data.next_due, next.data.overdue)}`
-          : "Maintenance: nothing scheduled"}
+      <Link className="panel tile" to="/climate">
+        <span className="eyebrow">A/C</span>
+        {climateLines(climate.data?.thermostats).map((line) => (
+          <span key={line} className="tile-line">
+            {line}
+          </span>
+        ))}
       </Link>
-      <Link to="/bills">
-        {bill.data ? `Last bill: $${bill.data.actual_charge.toFixed(2)} actual` : "Last bill: none yet"}
+      <Link className="panel tile" to="/maintenance">
+        <span className="eyebrow">Maintenance</span>
+        {next.data ? (
+          <>
+            <span className="tile-value">{next.data.name}</span>
+            <span className="sub">{dueText(next.data.next_due, next.data.overdue)}</span>
+          </>
+        ) : (
+          <span className="tile-value">Nothing scheduled</span>
+        )}
+      </Link>
+      <Link className="panel tile" to="/bills">
+        <span className="eyebrow">Last bill</span>
+        {bill.data ? (
+          <>
+            <span className="tile-value">${bill.data.actual_charge.toFixed(2)}</span>
+            <span className="sub">actual charge</span>
+          </>
+        ) : (
+          <span className="tile-value">None yet</span>
+        )}
       </Link>
     </div>
   );

@@ -129,32 +129,36 @@ describe("HomeView", () => {
     expect(within(pin).getByText("—")).toBeInTheDocument();
   });
 
-  it("strip_shows_the_next_maintenance_item_and_links_to_it", async () => {
+  it("maintenance_tile_shows_the_next_item_and_links_to_it", async () => {
     renderHome(LIVE, true, { name: "HVAC Filters", next_due: "2026-08-23", overdue: true });
     const link = await screen.findByRole("link", { name: /HVAC Filters/ });
     expect(link).toHaveAttribute("href", "/maintenance");
-    expect(link).toHaveTextContent(/overdue since Aug 23/i);
+    expect(within(link).getByText("Maintenance")).toBeInTheDocument();
+    expect(within(link).getByText(/overdue since Aug 23/i)).toBeInTheDocument();
   });
 
-  it("strip_with_nothing_due_still_links_to_maintenance", async () => {
+  it("maintenance_tile_with_nothing_due_still_links_to_maintenance", async () => {
     renderHome(LIVE);
-    const link = await screen.findByRole("link", { name: /Maintenance: nothing scheduled/i });
+    const link = await screen.findByRole("link", { name: /Maintenance.*Nothing scheduled/i });
     expect(link).toHaveAttribute("href", "/maintenance");
   });
 
-  it("strip_shows_the_last_bill_as_the_actual_charge", async () => {
+  it("bill_tile_shows_the_actual_charge", async () => {
     renderHome(LIVE, true, null, { actual_charge: 150.26, budget_payment: 248 });
-    const link = await screen.findByRole("link", { name: /Last bill: \$150\.26 actual/ });
+    const link = await screen.findByRole("link", { name: /Last bill/ });
+    expect(await within(link).findByText("$150.26")).toBeInTheDocument();
+    expect(within(link).getByText("actual charge")).toBeInTheDocument();
     expect(link).toHaveAttribute("href", "/bills");
   });
 
-  it("strip_shows_both_thermostats_and_links_to_climate", async () => {
+  it("ac_tile_shows_both_thermostats_and_links_to_climate", async () => {
     renderHome(LIVE, true, null, null, [
       { name: "Upstairs", stale: false, ambient_f: 67.4, setpoint_f: 67 },
       { name: "Downstairs", stale: true, ambient_f: null, setpoint_f: null },
     ]);
-    const link = await screen.findByRole("link", { name: /Upstairs 67° → 67°/ });
-    expect(link).toHaveTextContent("Downstairs: no recent reading");
+    const link = await screen.findByRole("link", { name: /A\/C/ });
+    expect(await within(link).findByText("Upstairs 67° → 67°")).toBeInTheDocument();
+    expect(within(link).getByText("Downstairs: no recent reading")).toBeInTheDocument();
     expect(link).toHaveAttribute("href", "/climate");
   });
 
