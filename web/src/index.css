@@ -68,7 +68,19 @@ a.traffic-cam:hover { border-color: var(--gold); }
 .network-globe { height: 200px; cursor: pointer; }
 .noisiest { margin: 8px 0 0; padding-left: 20px; font-size: 14px; }
 .noisiest li { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 3px 0; }
-.camera-events h2 { margin: 0; font-size: 16px; }
+.cam-section { margin-top: 28px; }
+.cam-section > h2.eyebrow { margin: 0 0 10px; font-size: 11px; font-weight: 500; letter-spacing: 1.4px; text-transform: uppercase; }
+.cam-section .traffic { margin: 0; }
+.cam-section th:nth-child(1) { width: 200px; }
+.cam-section th:nth-child(2) { width: 280px; }
+.cam-section .camera-events .table-scroll { margin-top: 0; }
+.house-cams { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.camera-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px; }
+.camera-card:has(video) { grid-column: span 2; }
+.camera-card h3 { margin: 0; font-size: 15px; font-weight: 550; }
+.camera-card .sub { margin: 0 0 auto; }
+.camera-card button, .traffic-cam button { margin-top: auto; }
+@media (max-width: 900px) { .house-cams { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .camera-card video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; margin: 8px 0; border-radius: 4px; background: #0c120c; }
 .strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; margin-top: 16px; }
 .tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; color: var(--text); text-decoration: none; }

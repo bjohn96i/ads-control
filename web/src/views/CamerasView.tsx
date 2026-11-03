@@ -135,27 +135,32 @@ export function CamerasView() {
         </p>
       ) : null}
       {traffic.data?.cameras.length ? (
-        <section>
-          <h2 className="eyebrow">TRAFFIC NEARBY · GEORGIA 511</h2>
-          <TrafficCams cameras={traffic.data.cameras} live />
+        <section className="cam-section">
+          <h2 className="eyebrow">Traffic nearby · Georgia 511</h2>
+          <TrafficCams className="traffic-row" cameras={traffic.data.cameras} live />
         </section>
       ) : null}
-      {data?.cameras.length === 0 ? <p className="sub">No cameras found yet.</p> : null}
-      {/* One PIN box for the page; once unlocked it renders nothing and the video controls appear. */}
-      <PinGate>{null}</PinGate>
-      <div className="tasks climate">
-        {data?.cameras.map((camera) => (
-        <article key={camera.id} className="panel task camera-card">
-          <h2>{camera.name}</h2>
-          <p className="sub">{eventText(camera)}</p>
-            {auth.data?.unlocked ? <LiveVideo camera={camera} /> : null}
-          </article>
-        ))}
-      </div>
+      <section className="cam-section">
+        <h2 className="eyebrow">At the house</h2>
+        {data?.cameras.length === 0 ? <p className="sub">No cameras found yet.</p> : null}
+        {/* One PIN box for the page; once unlocked it renders nothing and the video controls appear. */}
+        <PinGate>{null}</PinGate>
+        <div className="house-cams">
+          {data?.cameras.map((camera) => (
+            <article key={camera.id} className="panel camera-card">
+              <h3>{camera.name}</h3>
+              <p className="sub">{eventText(camera)}</p>
+              {auth.data?.unlocked ? <LiveVideo camera={camera} /> : null}
+            </article>
+          ))}
+        </div>
+      </section>
       {events.data ? (
-        <section className="panel camera-events">
-          <h2>Last 25 camera events</h2>
-          <CameraEventTable events={events.data.events} />
+        <section className="cam-section">
+          <h2 className="eyebrow">Last 25 camera events</h2>
+          <div className="panel camera-events">
+            <CameraEventTable events={events.data.events} />
+          </div>
         </section>
       ) : null}
     </main>
