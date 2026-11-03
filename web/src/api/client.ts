@@ -88,4 +88,4 @@ export type Network = {
   home: { lat: number; lon: number } | null;
 };
 
-export type TrafficCamera = { nickname: string; name: string; image_url: string; home: boolean };
+export type TrafficCamera = { nickname: string; name: string; view: number; image_url: string; home: boolean };

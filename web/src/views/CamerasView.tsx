@@ -137,7 +137,7 @@ export function CamerasView() {
       {traffic.data?.cameras.length ? (
         <section>
           <h2 className="eyebrow">TRAFFIC NEARBY · GEORGIA 511</h2>
-          <TrafficCams cameras={traffic.data.cameras} />
+          <TrafficCams cameras={traffic.data.cameras} live />
         </section>
       ) : null}
       {data?.cameras.length === 0 ? <p className="sub">No cameras found yet.</p> : null}

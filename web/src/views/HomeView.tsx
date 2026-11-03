@@ -34,7 +34,16 @@ export function HomeView() {
       {isError ? <p className="warn" role="alert">Can't reach the house server</p> : null}
       {data ? (
         <div className="overview">
-          <HouseScene zones={data.zones} chargerWatts={data.charger_estimate_w} />
+          <div className="main">
+            <HouseScene zones={data.zones} chargerWatts={data.charger_estimate_w} />
+            {traffic.data ? (
+              <TrafficCams
+                className="traffic-row"
+                cameras={traffic.data.cameras.filter((c) => c.home)}
+                linkTo="/cameras"
+              />
+            ) : null}
+          </div>
           <div className="side">
             <UsagePanel live={data} />
             {events.data ? (
@@ -46,9 +55,6 @@ export function HomeView() {
             <NetworkPanel />
           </div>
         </div>
-      ) : null}
-      {traffic.data ? (
-        <TrafficCams cameras={traffic.data.cameras.filter((c) => c.home)} linkTo="/cameras" />
       ) : null}
       <StatusStrip />
     </main>

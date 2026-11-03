@@ -53,14 +53,17 @@ p { margin: 4px 0; }
 .pin b { color: var(--gold); font-weight: 500; font-size: 15px; }
 .pin-flag { color: var(--orange); font-size: 10px; }
 .side { display: flex; flex-direction: column; gap: 16px; }
+.main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.traffic.traffic-row { grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 0; }
+@media (max-width: 900px) { .traffic.traffic-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .usage { padding: 18px; border-top: 2px solid var(--orange); }
 .big { font-size: 46px; letter-spacing: -1.5px; line-height: 1.15; margin: 6px 0; }
 .camera-events { display: block; padding: 14px 16px; color: var(--text); text-decoration: none; }
 a.camera-events:hover { border-color: var(--gold); }
 .traffic { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 10px; margin: 16px 0; }
-.traffic-cam { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 8px; color: var(--text); text-decoration: none; }
+.traffic-cam { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin: 0; padding: 8px; color: var(--text); text-decoration: none; }
 a.traffic-cam:hover { border-color: var(--gold); }
-.traffic-cam img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 4px; background: #0c120c; margin-bottom: 4px; }
+.traffic-cam video, .traffic-cam img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 4px; background: #0c120c; margin-bottom: 4px; }
 .network { padding: 14px 16px; }
 .network-globe { height: 200px; cursor: pointer; }
 .noisiest { margin: 8px 0 0; padding-left: 20px; font-size: 14px; }

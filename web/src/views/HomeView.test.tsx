@@ -35,8 +35,8 @@ function renderHome(
         ? new Response(JSON.stringify({ pin_set: true, unlocked: false }))
         : url === "/api/traffic"
           ? new Response(JSON.stringify({ cameras: [
-              { nickname: "Pool Turtle", name: "SR 154 at SR 12", image_url: "https://511ga.org/map/Cctv/24030", home: true },
-              { nickname: "QT Exit 2", name: "I-285 CCW", image_url: "https://511ga.org/map/Cctv/21551", home: false },
+              { nickname: "Pool Turtle", name: "SR 154 at SR 12", view: 24030, image_url: "https://511ga.org/map/Cctv/24030", home: true },
+              { nickname: "QT Exit 2", name: "I-285 CCW", view: 21551, image_url: "https://511ga.org/map/Cctv/21551", home: false },
             ] }))
         : url === "/api/network"
           ? new Response(JSON.stringify({ top_devices: [{ id: "tv", name: "Living Room TV", device_type: "iot", queries: 10, blocked: 1 }], arcs: [], home: null }))
