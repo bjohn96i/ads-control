@@ -159,7 +159,7 @@ def test_client_has_no_schedule_method():
         "list_cameras",
         "generate_stream",
         "stop_stream",
-        "fetch_event_image",
+        "fetch_clip",
         "pull_events",
         "ack_events",
     }
@@ -357,44 +357,37 @@ async def test_stop_stream_names_the_session(tmp_path):
     assert body["params"] == {"mediaSessionId": "s1"}
 
 
-@respx.mock
-async def test_event_image_downloads_with_basic_token(tmp_path):
-    _token()
-    respx.post(f"{BASE}/devices/door1:executeCommand").mock(
-        return_value=httpx.Response(
-            200, json={"results": {"url": "https://img.example/x", "token": "g.0.tok"}}
-        )
-    )
-    image = respx.get("https://img.example/x").mock(
-        return_value=httpx.Response(200, content=b"jpegbytes")
-    )
-    assert await _client(tmp_path).fetch_event_image("door1", "e1") == b"jpegbytes"
-    request = image.calls[0].request
-    assert request.headers["authorization"] == "Basic g.0.tok"
-    assert request.url.params["width"] == "960"
+CLIP_URL = "https://nest-camera-frontend.googleapis.com/frontend/encoded/clip"
 
 
 @respx.mock
-async def test_expired_event_image_is_a_nest_error(tmp_path):
+async def test_preview_clip_downloads_with_the_access_token(tmp_path):
     _token()
-    respx.post(f"{BASE}/devices/door1:executeCommand").mock(
-        return_value=httpx.Response(400, json={"error": {"message": "no longer available"}})
-    )
+    clip = respx.get(CLIP_URL).mock(return_value=httpx.Response(200, content=b"mp4bytes"))
+    assert await _client(tmp_path).fetch_clip(CLIP_URL) == b"mp4bytes"
+    assert clip.calls[0].request.headers["authorization"] == "Bearer access-1"
+
+
+@respx.mock
+async def test_preview_clip_from_another_host_never_gets_the_token(tmp_path):
+    token = _token()
+    other = respx.get(url__regex=r".*").mock(return_value=httpx.Response(200, content=b"x"))
+    for url in [
+        "https://evil.example/clip",
+        "https://evilgoogleapis.com/c",
+        "http://x.googleapis.com/c",
+    ]:
+        with pytest.raises(NestError):
+            await _client(tmp_path).fetch_clip(url)
+    assert not token.called and not other.called
+
+
+@respx.mock
+async def test_failed_clip_download_is_a_nest_error(tmp_path):
+    _token()
+    respx.get(CLIP_URL).mock(return_value=httpx.Response(410))
     with pytest.raises(NestError):
-        await _client(tmp_path).fetch_event_image("door1", "e1")
-
-
-@respx.mock
-async def test_failed_image_download_is_a_nest_error(tmp_path):
-    _token()
-    respx.post(f"{BASE}/devices/door1:executeCommand").mock(
-        return_value=httpx.Response(
-            200, json={"results": {"url": "https://img.example/x", "token": "t"}}
-        )
-    )
-    respx.get("https://img.example/x").mock(return_value=httpx.Response(410))
-    with pytest.raises(NestError):
-        await _client(tmp_path).fetch_event_image("door1", "e1")
+        await _client(tmp_path).fetch_clip(CLIP_URL)
 
 
 SUBSCRIPTION = "projects/p/subscriptions/s"

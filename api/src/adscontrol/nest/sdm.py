@@ -27,8 +27,8 @@ CAMERA_TYPES = {
     "sdm.devices.types.DISPLAY": "display",
 }
 STREAM = "sdm.devices.commands.CameraLiveStream."
-EVENT_IMAGE = "sdm.devices.commands.CameraEventImage.GenerateImage"
-IMAGE_WIDTH = 960
+# The access token is sent with a clip download, so only to Google's own hosts.
+CLIP_HOSTS = (".googleapis.com", ".google.com", ".googleusercontent.com")
 THERMOSTAT_TYPE = "sdm.devices.types.THERMOSTAT"
 TRAIT = "sdm.devices.traits."
 SETPOINT = "sdm.devices.commands.ThermostatTemperatureSetpoint."
@@ -194,6 +194,9 @@ class SdmClient:
         self._access_expires = self._clock() + body.get("expires_in", 3600) - 60
 
     async def _request(self, method: str, url: str, **kwargs) -> dict:
+        return (await self._response(method, url, **kwargs)).json()
+
+    async def _response(self, method: str, url: str, **kwargs) -> httpx.Response:
         try:
             async with httpx.AsyncClient(timeout=20) as client:
                 if self._access is None or self._clock() >= self._access_expires:
@@ -208,7 +211,7 @@ class SdmClient:
             raise RateLimited("Google asked us to slow down")
         if not response.is_success:
             raise NestError(f"Google answered {response.status_code}: {_message(response)}")
-        return response.json()
+        return response
 
     async def _send(self, client: httpx.AsyncClient, method: str, url: str, **kwargs):
         headers = {"Authorization": f"Bearer {self._access}"}
@@ -254,19 +257,12 @@ class SdmClient:
     async def stop_stream(self, device_id: str, session_id: str) -> None:
         await self._execute(device_id, STREAM + "StopWebRtcStream", {"mediaSessionId": session_id})
 
-    async def fetch_event_image(self, device_id: str, event_id: str) -> bytes:
-        body = await self._execute(device_id, EVENT_IMAGE, {"eventId": event_id})
-        try:
-            url, token = body["results"]["url"], body["results"]["token"]
-            async with httpx.AsyncClient(timeout=20) as client:
-                response = await client.get(
-                    url, params={"width": IMAGE_WIDTH}, headers={"Authorization": f"Basic {token}"}
-                )
-        except (KeyError, httpx.HTTPError) as exc:
-            raise NestError(f"could not download the event image: {type(exc).__name__}") from exc
-        if not response.is_success:
-            raise NestError(f"event image answered {response.status_code}")
-        return response.content
+    async def fetch_clip(self, url: str) -> bytes:
+        """A doorbell preview clip (a short MP4) from a ClipPreview event."""
+        parts = urlparse(url)
+        if parts.scheme != "https" or not (parts.hostname or "").endswith(CLIP_HOSTS):
+            raise NestError(f"preview clip from an unexpected host: {parts.hostname}")
+        return (await self._response("GET", url)).content
 
     async def pull_events(self, subscription: str) -> list[tuple[str, dict | None]]:
         body = await self._request(

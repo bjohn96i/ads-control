@@ -45,3 +45,25 @@ async def session(engine):
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as s:
         yield s
+
+
+@pytest.fixture(scope="session")
+def tiny_mp4() -> bytes:
+    """A real 10-frame MP4, shaped like a doorbell preview clip."""
+    import io
+
+    import av
+
+    buffer = io.BytesIO()
+    with av.open(buffer, "w", format="mp4") as out:
+        stream = out.add_stream("mpeg4", rate=10)
+        stream.width, stream.height, stream.pix_fmt = 64, 48, "yuv420p"
+        for _ in range(10):
+            frame = av.VideoFrame(64, 48, "yuv420p")
+            for plane in frame.planes:
+                plane.update(bytes([128]) * plane.buffer_size)
+            for packet in stream.encode(frame):
+                out.mux(packet)
+        for packet in stream.encode(None):
+            out.mux(packet)
+    return buffer.getvalue()

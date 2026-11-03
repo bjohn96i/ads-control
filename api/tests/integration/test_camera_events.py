@@ -31,12 +31,27 @@ def payload(
     }
 
 
+CLIP_URL = "https://nest-camera-frontend.googleapis.com/clip"
+
+
+def clip(device="door1", at=NOW - timedelta(seconds=5), *, with_event=True):
+    message = payload("CameraMotion.Motion", f"m{at.timestamp()}", device, at)
+    events = message["resourceUpdate"]["events"]
+    if not with_event:
+        events.clear()
+    events["sdm.devices.events.CameraClipPreview.ClipPreview"] = {
+        "eventSessionId": "s",
+        "previewUrl": CLIP_URL,
+    }
+    return message
+
+
 class FakeSdm:
-    def __init__(self, messages=(), image=b"jpeg", cameras=None):
+    def __init__(self, messages=(), clip=None, cameras=None):
         self.messages = list(messages)
-        self.image = image
+        self.clip = clip
         self.acked = []
-        self.images = []
+        self.clips = []
         self.streams = []
         self.stopped = []
         self.stream_error = None
@@ -55,11 +70,11 @@ class FakeSdm:
     async def ack_events(self, subscription, ack_ids):
         self.acked.extend(ack_ids)
 
-    async def fetch_event_image(self, device_id, event_id):
-        self.images.append((device_id, event_id))
-        if isinstance(self.image, Exception):
-            raise self.image
-        return self.image
+    async def fetch_clip(self, url):
+        self.clips.append(url)
+        if isinstance(self.clip, Exception):
+            raise self.clip
+        return self.clip
 
     async def generate_stream(self, device_id, offer):
         if self.stream_error:
@@ -80,7 +95,7 @@ async def clean(session):
 
 
 def _service(engine, sdm, tmp_path):
-    return CameraService(sdm, "sub", async_sessionmaker(engine), tmp_path, clock=lambda: NOW)
+    return CameraService(sdm, "sub", async_sessionmaker(engine), tmp_path)
 
 
 async def _ready(engine, sdm, tmp_path):
@@ -159,57 +174,85 @@ async def test_sync_adds_cameras_and_keeps_names_current(engine, session, clean,
     assert rows == ["Renamed", "Entryway doorbell"]
 
 
-async def test_event_stores_its_image_and_is_acknowledged(engine, session, clean, tmp_path):
+async def _image_of(session, tmp_path, device="door1"):
+    camera_id = await session.scalar(
+        text("SELECT id FROM cameras WHERE device_id = :d"), {"d": device}
+    )
+    path = tmp_path / f"{camera_id}.jpg"
+    return path.read_bytes() if path.exists() else None
+
+
+async def test_event_is_recorded_and_acknowledged(engine, session, clean, tmp_path):
     sdm = FakeSdm([("a1", payload())])
     service = await _ready(engine, sdm, tmp_path)
     await service.poll()
     assert sdm.acked == ["a1"]
-    camera_id = await session.scalar(text("SELECT id FROM cameras WHERE device_id = 'cam1'"))
-    assert (tmp_path / f"{camera_id}.jpg").read_bytes() == b"jpeg"
+    assert await session.scalar(text("SELECT count(*) FROM camera_events")) == 1
+    assert sdm.clips == []
+
+
+async def test_doorbell_preview_clip_becomes_its_picture(
+    engine, session, clean, tmp_path, tiny_mp4
+):
+    sdm = FakeSdm([("a1", clip())], clip=tiny_mp4)
+    service = await _ready(engine, sdm, tmp_path)
+    await service.poll()
+    assert sdm.clips == [CLIP_URL]
+    assert (await _image_of(session, tmp_path))[:2] == b"\xff\xd8"
+    # the clip is the event's picture, not an event of its own
     assert await session.scalar(text("SELECT count(*) FROM camera_events")) == 1
 
 
-async def test_duplicate_pubsub_event_recorded_once(engine, session, clean, tmp_path):
-    sdm = FakeSdm([("a1", payload()), ("a2", payload())])
+async def test_clip_in_a_message_of_its_own_still_sets_the_picture(
+    engine, session, clean, tmp_path, tiny_mp4
+):
+    sdm = FakeSdm([("a1", clip(with_event=False))], clip=tiny_mp4)
+    service = await _ready(engine, sdm, tmp_path)
+    await service.poll()
+    assert await _image_of(session, tmp_path) is not None
+    assert sdm.acked == ["a1"]
+
+
+async def test_duplicate_pubsub_event_recorded_once(engine, session, clean, tmp_path, tiny_mp4):
+    sdm = FakeSdm([("a1", clip()), ("a2", clip())], clip=tiny_mp4)
     service = await _ready(engine, sdm, tmp_path)
     await service.poll()
     assert await session.scalar(text("SELECT count(*) FROM camera_events")) == 1
-    assert len(sdm.images) == 1
+    assert len(sdm.clips) == 1
     assert sdm.acked == ["a1", "a2"]
 
 
-async def test_failed_image_keeps_the_old_one_and_still_records(engine, session, clean, tmp_path):
-    sdm = FakeSdm([("a1", payload())])
+@pytest.mark.parametrize("failure", [NestError("expired"), b"not a video"])
+async def test_failed_clip_keeps_the_old_picture_and_still_records(
+    engine, session, clean, tmp_path, tiny_mp4, caplog, failure
+):
+    sdm = FakeSdm([("a1", clip(at=NOW - timedelta(seconds=9)))], clip=tiny_mp4)
     service = await _ready(engine, sdm, tmp_path)
     await service.poll()
-    sdm.image = NestError("expired")
-    sdm.messages = [("a2", payload(event_id="e2", at=NOW))]
+    before = await _image_of(session, tmp_path)
+    sdm.clip = failure
+    sdm.messages = [("a2", clip(at=NOW))]
     await service.poll()
-    camera_id = await session.scalar(text("SELECT id FROM cameras WHERE device_id = 'cam1'"))
-    assert (tmp_path / f"{camera_id}.jpg").read_bytes() == b"jpeg"
+    assert await _image_of(session, tmp_path) == before
     assert await session.scalar(text("SELECT count(*) FROM camera_events")) == 2
     assert sdm.acked == ["a1", "a2"]
+    assert any(r.levelname == "WARNING" and "no image" in r.getMessage() for r in caplog.records)
 
 
-async def test_event_too_old_for_an_image_does_not_ask(engine, session, clean, tmp_path):
-    sdm = FakeSdm([("a1", payload(at=NOW - timedelta(seconds=45)))])
-    service = await _ready(engine, sdm, tmp_path)
-    await service.poll()
-    assert sdm.images == []
-    assert await session.scalar(text("SELECT count(*) FROM camera_events")) == 1
-
-
-async def test_older_event_arriving_late_does_not_replace_a_newer_image(
-    engine, session, clean, tmp_path
+async def test_older_clip_arriving_late_does_not_replace_a_newer_picture(
+    engine, session, clean, tmp_path, tiny_mp4
 ):
-    sdm = FakeSdm([("a1", payload(event_id="new", at=NOW - timedelta(seconds=1)))], image=b"new")
+    sdm = FakeSdm([("a1", clip(at=NOW - timedelta(seconds=1)))], clip=tiny_mp4)
     service = await _ready(engine, sdm, tmp_path)
     await service.poll()
-    sdm.image = b"old"
-    sdm.messages = [("a2", payload(event_id="older", at=NOW - timedelta(seconds=10)))]
+    sdm.messages = [("a2", clip(at=NOW - timedelta(seconds=10)))]
     await service.poll()
-    camera_id = await session.scalar(text("SELECT id FROM cameras WHERE device_id = 'cam1'"))
-    assert (tmp_path / f"{camera_id}.jpg").read_bytes() == b"new"
+    assert sdm.clips == [CLIP_URL]
+
+
+def test_clip_previews_are_not_logged_as_ignored(caplog):
+    parse_events(clip())
+    assert "ignored" not in caplog.text
 
 
 async def test_unknown_camera_triggers_a_sync(engine, session, clean, tmp_path):
@@ -239,30 +282,32 @@ async def test_unreadable_message_is_acknowledged_not_retried_forever(
     assert sdm.acked == ["a1"]
 
 
-async def test_list_shows_last_event_and_image_age(engine, session, clean, tmp_path, migrated_db):
-    sdm = FakeSdm([("a1", payload("CameraPerson.Person"))])
+async def test_list_shows_last_event_and_image_age(
+    engine, session, clean, tmp_path, migrated_db, tiny_mp4
+):
+    sdm = FakeSdm([("a1", payload("CameraPerson.Person")), ("a2", clip())], clip=tiny_mp4)
     await (await _ready(engine, sdm, tmp_path)).poll()
     async with await _app_client(session, migrated_db, sdm, tmp_path, unlocked=False) as c:
         cameras = (await c.get("/api/cameras")).json()["cameras"]
     backyard = next(x for x in cameras if x["name"] == "Backyard camera")
     assert backyard["last_event"] == "person"
     assert backyard["last_event_at"].startswith("2026-11-02T16:00:05")
-    assert backyard["has_image"] is True
-    assert backyard["image_age_s"] == pytest.approx(5)
+    assert (backyard["has_image"], backyard["image_age_s"]) == (False, None)
     doorbell = next(x for x in cameras if x["name"] == "Entryway doorbell")
-    assert (doorbell["last_event"], doorbell["has_image"]) == (None, False)
+    assert (doorbell["last_event"], doorbell["has_image"]) == ("motion", True)
+    assert doorbell["image_age_s"] == pytest.approx(5)
 
 
-async def test_image_requires_pin(engine, session, clean, tmp_path, migrated_db):
-    sdm = FakeSdm([("a1", payload())])
+async def test_image_requires_pin(engine, session, clean, tmp_path, migrated_db, tiny_mp4):
+    sdm = FakeSdm([("a1", clip())], clip=tiny_mp4)
     await (await _ready(engine, sdm, tmp_path)).poll()
-    camera_id = await session.scalar(text("SELECT id FROM cameras WHERE device_id = 'cam1'"))
+    camera_id = await session.scalar(text("SELECT id FROM cameras WHERE device_id = 'door1'"))
     async with await _app_client(session, migrated_db, sdm, tmp_path, unlocked=False) as c:
         assert (await c.get(f"/api/cameras/{camera_id}/image")).status_code == 401
     async with await _app_client(session, migrated_db, sdm, tmp_path) as c:
         r = await c.get(f"/api/cameras/{camera_id}/image")
         assert r.status_code == 200
-        assert r.content == b"jpeg"
+        assert r.content[:2] == b"\xff\xd8"
         assert r.headers["content-type"] == "image/jpeg"
         assert "no-store" in r.headers["cache-control"]
 
@@ -352,12 +397,3 @@ def test_unrecognised_event_types_are_logged_by_name(caplog):
     }
     assert parse_events(message) == []
     assert "sdm.devices.events.CameraVehicle.Vehicle" in caplog.text
-
-
-async def test_failed_image_is_logged_where_the_server_log_can_see_it(
-    engine, session, clean, tmp_path, caplog
-):
-    sdm = FakeSdm([("a1", payload())], image=NestError("expired"))
-    service = await _ready(engine, sdm, tmp_path)
-    await service.poll()
-    assert any(r.levelname == "WARNING" and "no image" in r.getMessage() for r in caplog.records)
