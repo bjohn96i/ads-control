@@ -13,6 +13,7 @@ const NETWORK = {
   ],
   arcs: [{ lat: 37.8, lon: -97.8, country_code: "US", country: "United States", queries: 900, blocked: 4, state: "normal" }],
   home: { lat: 33.75, lon: -84.39 },
+  lanthorn_url: "http://192.168.4.227:8080",
 };
 
 class SizedObserver {
@@ -39,7 +40,7 @@ describe("NetworkPanel", () => {
   it("lists_noisiest_devices_opening_each_in_lanthorn", async () => {
     show(new Response(JSON.stringify(NETWORK)));
     const tv = await screen.findByRole("link", { name: /Living Room TV/ });
-    expect(tv).toHaveAttribute("href", `http://${window.location.hostname}:8000/?panel=device%3Atv%25201&range=24h`);
+    expect(tv).toHaveAttribute("href", "http://192.168.4.227:8080/?panel=device%3Atv%25201&range=24h");
     expect(tv).toHaveAttribute("target", "_blank");
     expect(screen.getByText("5,442")).toBeInTheDocument();
     expect(screen.getByText("64% blocked")).toBeInTheDocument();
@@ -49,7 +50,7 @@ describe("NetworkPanel", () => {
   it("heading_opens_lanthorn_overview", async () => {
     show(new Response(JSON.stringify(NETWORK)));
     const heading = await screen.findByRole("link", { name: /network/i });
-    expect(heading).toHaveAttribute("href", `http://${window.location.hostname}:8000/?range=24h`);
+    expect(heading).toHaveAttribute("href", "http://192.168.4.227:8080/?range=24h");
   });
 
   it("lanthorn_down_says_so", async () => {

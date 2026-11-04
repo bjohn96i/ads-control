@@ -5,10 +5,8 @@ import { getJson, type Network } from "../../api/client";
 
 const Globe = lazy(() => import("./Globe"));
 
-// shortcut: assumes Lanthorn runs on the same machine as this app, on port 8000; give it a real address on Proxmox.
-function lanthorn(params: Record<string, string> = {}): string {
-  const query = new URLSearchParams({ ...params, range: "24h" });
-  return `http://${window.location.hostname}:8000/?${query}`;
+function lanthornLink(base: string, params: Record<string, string> = {}): string {
+  return `${base}/?${new URLSearchParams({ ...params, range: "24h" })}`;
 }
 
 const open = (href: string) => window.open(href, "_blank", "noopener");
@@ -33,12 +31,17 @@ export function NetworkPanel() {
     refetchInterval: 60_000,
   });
   const [box, width] = useWidth();
+  const lanthorn = (params?: Record<string, string>) => lanthornLink(data?.lanthorn_url ?? "", params);
 
   return (
     <section className="panel network">
-      <a className="eyebrow" href={lanthorn()} target="_blank" rel="noopener">
-        NETWORK / LAST 24 HOURS
-      </a>
+      {data ? (
+        <a className="eyebrow" href={lanthorn()} target="_blank" rel="noopener">
+          NETWORK / LAST 24 HOURS
+        </a>
+      ) : (
+        <span className="eyebrow">NETWORK / LAST 24 HOURS</span>
+      )}
       {isError ? (
         <p className="warn" role="alert">
           Lanthorn isn't reachable

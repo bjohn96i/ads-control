@@ -9,7 +9,8 @@ TOP_DEVICES = 5
 
 @router.get("")
 async def network(request: Request) -> dict:
-    url = f"{request.app.state.settings.lanthorn_url}/api/overview"
+    base = request.app.state.settings.lanthorn_url.rstrip("/")
+    url = f"{base}/api/overview"
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(url, params={"range": "24h"})
@@ -21,4 +22,5 @@ async def network(request: Request) -> dict:
         "top_devices": (body.get("top_devices") or [])[:TOP_DEVICES],
         "arcs": body.get("arcs") or [],
         "home": body.get("home"),
+        "lanthorn_url": base,
     }

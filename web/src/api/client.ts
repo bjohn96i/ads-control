@@ -86,6 +86,7 @@ export type Network = {
   top_devices: { id: string; name: string; device_type: string; queries: number; blocked: number }[];
   arcs: NetworkArc[];
   home: { lat: number; lon: number } | null;
+  lanthorn_url: string;
 };
 
 export type TrafficCamera = { nickname: string; name: string; view: number; image_url: string; home: boolean };

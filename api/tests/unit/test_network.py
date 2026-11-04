@@ -55,7 +55,8 @@ def test_network_passes_on_top_five_devices_arcs_and_home():
     assert body["arcs"] == OVERVIEW["arcs"]
     assert body["home"] == {"lat": 33.75, "lon": -84.39}
     # only what the panel draws; Lanthorn's alerts stay in Lanthorn
-    assert set(body) == {"top_devices", "arcs", "home"}
+    assert body["lanthorn_url"] == LANTHORN  # where the page's links open
+    assert set(body) == {"top_devices", "arcs", "home", "lanthorn_url"}
 
 
 @respx.mock
