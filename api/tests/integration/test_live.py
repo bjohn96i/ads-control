@@ -181,3 +181,26 @@ async def test_today_reports_how_much_was_recorded(session, migrated_db):
     await _sample(session, {**FULL, 1: 2000.0}, NOW - timedelta(minutes=10))
     body = await _get(migrated_db)
     assert 0 < body["today_coverage"] < 0.01
+
+
+async def test_recent_line_skips_a_minute_missing_one_incoming_leg(session, migrated_db):
+    await _sample(session, {**FULL, 1: 1000.0, 7: 1000.0}, NOW - timedelta(seconds=90))
+    partial = {c: w for c, w in {**FULL, 1: 1000.0}.items() if c != 7}
+    await _sample(session, partial, NOW - timedelta(seconds=30))
+    assert [p["watts"] for p in (await _get(migrated_db))["recent_w"]] == [pytest.approx(2000)]
+
+
+async def test_whole_house_label_position_comes_from_its_zone(session, migrated_db):
+    await _sample(session, FULL)
+    assert (await _get(migrated_db))["whole_house_pin"] == {"x": 65, "y": 79}
+
+
+async def test_today_is_reused_for_a_minute(session, migrated_db):
+    app = _app(migrated_db)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+        first = (await client.get("/api/live")).json()["today_kwh"]
+        await _sample(session, {**FULL, 1: 9000.0}, NOW - timedelta(minutes=5))
+        assert (await client.get("/api/live")).json()["today_kwh"] == first
+        app.state.clock = lambda: NOW + timedelta(seconds=61)
+        assert (await client.get("/api/live")).json()["today_kwh"] > first

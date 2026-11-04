@@ -18,6 +18,7 @@ const LIVE = {
   today_kwh: 31.4,
   today_cost: 4.12,
   today_coverage: 0.98,
+  whole_house_pin: { x: 65, y: 79 },
   recent_w: [
     { time: "2026-11-02T04:58:00Z", watts: 1500 },
     { time: "2026-11-02T04:59:00Z", watts: 1600 },
@@ -36,12 +37,14 @@ function renderHome(
   bill: unknown = null,
   climate: unknown[] = [],
   events: unknown[] = [],
-  { unlocked = false, network = true } = {},
+  { unlocked = false, network = true, failing = [] as string[] } = {},
 ) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) =>
-      url === "/api/auth/status"
+      failing.includes(url)
+        ? new Response("{}", { status: 500 })
+        : url === "/api/auth/status"
         ? new Response(JSON.stringify({ pin_set: true, unlocked }))
         : url === "/api/traffic"
           ? new Response(JSON.stringify({ cameras: [
@@ -163,6 +166,28 @@ describe("HomeView", () => {
       { camera_id: 2, camera: "Entryway doorbell", type: "chime", occurred_at: "2026-01-02T19:14:00Z" },
     ]);
     expect(await screen.findByText(/Jan 2/)).toBeInTheDocument();
+  });
+
+  it("small_amounts_today_keep_a_decimal", async () => {
+    renderHome({ ...LIVE, today_kwh: 0.4 });
+    const card = (await screen.findByText("Power now")).closest("a")!;
+    expect(within(card).getByText(/Today 0\.4 kWh/)).toBeInTheDocument();
+  });
+
+  it("ac_card_says_offline_rather_than_idle", async () => {
+    renderHome(LIVE, true, [], null, [{ ...{ id: 1, name: "Upstairs", stale: false, ambient_f: 74, setpoint_f: 72, heat_f: null, cool_f: 72, mode: "COOL", hvac_status: "OFF", eco: false, online: true }, online: false }]);
+    expect(await screen.findByText("Upstairs · offline")).toBeInTheDocument();
+  });
+
+  it("ac_card_says_off_when_the_thermostat_is_off", async () => {
+    renderHome(LIVE, true, [], null, [{ id: 1, name: "Upstairs", stale: false, ambient_f: 74, setpoint_f: null, heat_f: null, cool_f: null, mode: "OFF", hvac_status: "OFF", eco: false, online: true }]);
+    expect(await screen.findByText("Upstairs · off")).toBeInTheDocument();
+  });
+
+  it("bill_and_maintenance_cards_say_when_they_cant_load", async () => {
+    renderHome(LIVE, true, [], null, [], [], { failing: ["/api/bills/latest", "/api/maintenance"] });
+    expect(await screen.findByText("Can't load the bills")).toBeInTheDocument();
+    expect(await screen.findByText("Can't load maintenance")).toBeInTheDocument();
   });
 
   it("maintenance_shows_the_next_three", async () => {

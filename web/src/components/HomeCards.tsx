@@ -2,12 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { getJson, type Live, type MaintenanceTask } from "../api/client";
-import { dueText, formatWatts } from "./format";
+import { dueText, formatKwh, formatWatts } from "./format";
 import { PinGate } from "./PinGate";
 import { blocked, type ThermostatState, ThermostatControls } from "./ThermostatControls";
 
 function statusText(t: ThermostatState): string {
   if (t.stale) return "no recent reading";
+  if (!t.online) return "offline";
+  if (t.mode === "OFF") return "off";
   if (t.hvac_status === "HEATING") return "heating";
   if (t.hvac_status === "COOLING") return "cooling";
   return "idle";
@@ -66,7 +68,7 @@ export function AcCard() {
 }
 
 export function MaintenanceCard() {
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey: ["maintenance"],
     queryFn: () => getJson<{ tasks: MaintenanceTask[] }>("/api/maintenance"),
     refetchInterval: 60_000,
@@ -79,6 +81,7 @@ export function MaintenanceCard() {
         <span>Maintenance</span>
         <span className="go">→</span>
       </div>
+      {isError ? <p className="sub">Can't load maintenance</p> : null}
       {data && next.length === 0 ? <p className="sub">Nothing scheduled</p> : null}
       {next.map((t) => (
         <div key={t.id} className="row">
@@ -96,7 +99,7 @@ function monthOf(isoDate: string): string {
 }
 
 export function BillCard() {
-  const { data, isSuccess } = useQuery({
+  const { data, isSuccess, isError } = useQuery({
     queryKey: ["bill-latest"],
     queryFn: () => getJson<{ actual_charge: number; period_end: string } | null>("/api/bills/latest"),
     refetchInterval: 3_600_000,
@@ -118,6 +121,8 @@ export function BillCard() {
         </>
       ) : isSuccess ? (
         <p className="sub">No bills yet</p>
+      ) : isError ? (
+        <p className="sub">Can't load the bills</p>
       ) : null}
     </Link>
   );
@@ -151,7 +156,7 @@ export function PowerCard({ live }: { live: Live }) {
         {live.today_coverage > 0 ? (
           <>
             <span className="d">
-              Today {Math.round(live.today_kwh)} kWh
+              Today {formatKwh(live.today_kwh)}
               {live.today_coverage < COVERAGE_WARN ? `, ${Math.round(live.today_coverage * 100)}% recorded` : ""}
             </span>
             <span className="d">≈ ${live.today_cost.toFixed(2)}</span>

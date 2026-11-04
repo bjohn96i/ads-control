@@ -22,7 +22,7 @@ const KITCHEN = [
 ];
 
 function show(zones: LiveZone[]) {
-  const live = { zones, whole_house_w: 1000, charger_estimate_w: 0 } as unknown as Live;
+  const live = { zones, whole_house_w: 1000, charger_estimate_w: 0, whole_house_pin: { x: 61, y: 77 } } as unknown as Live;
   render(
     <MemoryRouter>
       <HouseScene live={live} />
@@ -50,6 +50,13 @@ describe("HouseScene", () => {
       zone({ id: 4, name: "Dryer", room: "Laundry" }),
     ]);
     expect(screen.getByRole("link", { name: /Laundry/ })).toHaveClass("flag");
+  });
+
+  it("whole house sits where its zone says", () => {
+    show(KITCHEN);
+    const label = screen.getByRole("link", { name: /Whole House/ });
+    expect(label.style.left).toBe("61%");
+    expect(label.style.top).toBe("77%");
   });
 
   it("labels open energy for the biggest circuit", () => {

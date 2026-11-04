@@ -5,6 +5,8 @@ export function formatWatts(watts: number | null): string {
   return watts >= 1000 ? `${(watts / 1000).toFixed(1)} kW` : `${Math.round(watts)} W`;
 }
 
+export const formatKwh = (value: number) => `${value < 10 ? value.toFixed(1) : Math.round(value)} kWh`;
+
 export function dueText(nextDue: string | null, overdue: boolean): string | null {
   if (!nextDue) return null;
   const [year, month, day] = nextDue.split("-").map(Number);

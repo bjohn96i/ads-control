@@ -18,12 +18,12 @@ function when(at: string): string {
   });
 }
 
-/** Just the time for today's events; older ones keep their day. */
+/** The time for today's events, the day for older ones; the full moment is on hover. */
 function shortWhen(at: string): string {
   const date = new Date(at);
   return date.toDateString() === new Date().toDateString()
     ? date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-    : when(at);
+    : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 export function eventText(camera: CameraInfo): string {
@@ -67,7 +67,9 @@ export function CameraEventList({ events }: { events: CameraEvent[] }) {
           <span>
             <span>{e.camera}</span> · <span className="d">{label(e.type)}</span>
           </span>
-          <span className="d">{shortWhen(e.occurred_at)}</span>
+          <span className="d" title={when(e.occurred_at)}>
+            {shortWhen(e.occurred_at)}
+          </span>
         </div>
       ))}
     </>

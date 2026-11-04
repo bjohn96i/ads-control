@@ -130,9 +130,9 @@ export function TrafficCams({
           <>
             <img src={`${camera.image_url}?t=${tick}`} alt={`Traffic at ${camera.nickname}`} loading="lazy" />
             <figcaption>
-        {camera.nickname}
-        <span>{camera.name}</span>
-      </figcaption>
+              {camera.nickname}
+              <span>{camera.name}</span>
+            </figcaption>
           </>
         );
         return linkTo ? (

@@ -26,6 +26,7 @@ export type Live = {
   today_kwh: number;
   today_cost: number;
   today_coverage: number;
+  whole_house_pin: { x: number; y: number } | null;
   recent_w: { time: string; watts: number }[];
 };
 

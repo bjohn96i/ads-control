@@ -18,6 +18,8 @@ CHARGER_WINDOW = timedelta(seconds=35)
 CHARGER_MIN_SAMPLES = 3
 OUTDOOR_STALE = timedelta(hours=3)
 RECENT_LINE = timedelta(hours=1)
+# Today's total adds up every reading since midnight; it barely moves in a minute.
+TODAY_CACHE = timedelta(seconds=60)
 
 router = APIRouter()
 
@@ -47,6 +49,8 @@ _LINE = text(
     SELECT time_bucket('1 minute', time) AS minute, avg(watts) AS watts FROM (
         SELECT time, sum(power_w) AS watts FROM channel_readings
         WHERE channel = ANY(:channels) AND time > :since AND time <= :now GROUP BY time
+        -- A sample missing one leg would read as half the house.
+        HAVING count(DISTINCT channel) = cardinality(:channels)
     ) samples GROUP BY 1 ORDER BY 1
     """
 )
@@ -75,6 +79,16 @@ def _day_start(now: datetime) -> datetime:
     return now.astimezone(LOCAL).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+async def _today(request: Request, session, now: datetime):
+    cached = getattr(request.app.state, "today_energy", None)
+    day = _day_start(now)
+    if cached and cached[0] == day and timedelta(0) <= now - cached[1] < TODAY_CACHE:
+        return cached[2]
+    today = await energy_by_zone(session, day, now)
+    request.app.state.today_energy = (day, now, today)
+    return today
+
+
 @router.get("/api/live")
 async def live(request: Request) -> dict:
     now: datetime = request.app.state.clock()
@@ -87,7 +101,7 @@ async def live(request: Request) -> dict:
         month = await energy_by_zone(session, _month_start(now), now)
         flags = await open_findings(session)
         recent = (await session.execute(_RECENT, {"since": now - CHARGER_WINDOW, "now": now})).all()
-        today = await energy_by_zone(session, _day_start(now), now)
+        today = await _today(request, session, now)
         outdoor = (await session.execute(_OUTDOOR, {"now": now})).first()
         incoming = next((z for z in zones if z.kind == "incoming"), None)
         line = (
@@ -147,6 +161,7 @@ async def live(request: Request) -> dict:
         "today_kwh": today_whole.kwh if today_whole else 0.0,
         "today_cost": today_whole.est_cost if today_whole else 0.0,
         "today_coverage": today_whole.coverage if today_whole else 0.0,
+        "whole_house_pin": {"x": incoming.pin_x, "y": incoming.pin_y} if incoming else None,
         "recent_w": [
             {"time": r.minute, "watts": r.watts * (incoming.multiplier if incoming else 1)}
             for r in line

@@ -159,6 +159,14 @@ describe("EnergyView", () => {
     );
   });
 
+  it("a_flagged_zone_is_announced_not_just_coloured", async () => {
+    LIVE.zones[0].flagged = true;
+    show();
+    const row = (await screen.findByRole("button", { name: "Dishwasher" })).closest("tr")!;
+    await vi.waitFor(() => expect(within(row).getByRole("img", { name: "Unusual" })).toBeInTheDocument());
+    LIVE.zones[0].flagged = false;
+  });
+
   it("eyebrow_names_floor_and_room", async () => {
     show(RANKING, "/energy?zone=4");
     await vi.waitFor(() => expect(screen.getByTestId("zone-where")).toHaveTextContent(/^Basement · Laundry$/));

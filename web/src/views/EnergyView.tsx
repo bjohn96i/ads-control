@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getJson, type Live, type LiveZone } from "../api/client";
-import { formatWatts } from "../components/format";
+import { formatKwh, formatWatts } from "../components/format";
 
 type EnergyLine = { kwh: number; est_cost: number; share: number; coverage: number };
 type Ranking = {
@@ -27,7 +27,7 @@ const RANGES = [
 ];
 const COVERAGE_WARN = 0.9;
 
-const kwh = (value: number) => `${value < 10 ? value.toFixed(1) : Math.round(value)} kWh`;
+const kwh = formatKwh;
 const dollars = (value: number) => `$${value.toFixed(2)}`;
 
 function Row({
@@ -55,7 +55,7 @@ function Row({
         ) : (
           name
         )}
-        {flagged ? <span className="flagdot" aria-label="Unusual" /> : null}
+        {flagged ? <span className="flagdot" role="img" aria-label="Unusual" /> : null}
       </td>
       <td className="n">{kwh(line.kwh)}</td>
       <td className="n">{dollars(line.est_cost)}</td>

@@ -4,6 +4,8 @@ Downgrade drops the columns but leaves the new positions: the old ones belonged 
 that no longer exists.
 """
 
+import logging
+
 from sqlalchemy import text
 
 from alembic import op
@@ -32,8 +34,19 @@ ROOMS = {
 def upgrade() -> None:
     op.execute("ALTER TABLE zones ADD COLUMN room text, ADD COLUMN floor text")
     update = text("UPDATE zones SET room = :r, floor = :f, pin_x = :x, pin_y = :y WHERE name = :n")
-    for name, (room, floor, x, y) in ROOMS.items():
-        op.get_bind().execute(update, {"n": name, "r": room, "f": floor, "x": x, "y": y})
+    missing = [
+        name
+        for name, (room, floor, x, y) in ROOMS.items()
+        if op.get_bind()
+        .execute(update, {"n": name, "r": room, "f": floor, "x": x, "y": y})
+        .rowcount
+        == 0
+    ]
+    if missing:
+        # A renamed zone keeps its old label position and no room; say which, so it can be fixed by hand.
+        logging.getLogger("alembic").warning(
+            "zones not found, rooms not set: %s", ", ".join(missing)
+        )
 
 
 def downgrade() -> None:

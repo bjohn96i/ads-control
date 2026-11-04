@@ -4,8 +4,7 @@ import { formatWatts } from "./format";
 
 export type Room = { name: string; watts: number | null; flagged: boolean; pin_x: number; pin_y: number; zoneId: number };
 
-// Whole House and the charger aren't circuits, so their places on the render live here.
-const WHOLE_HOUSE_PIN = { x: 65, y: 79 };
+// The charger has no zone of its own, so its place on the render lives here.
 const CHARGER_PIN = { x: 82, y: 50 };
 
 /** One label per room: circuits in the same room add up; one stopped circuit makes the room unknown. */
@@ -60,7 +59,9 @@ export function HouseScene({ live }: { live: Live }) {
           flagged={room.flagged}
         />
       ))}
-      <Label name="Whole House" value={formatWatts(live.whole_house_w)} x={WHOLE_HOUSE_PIN.x} y={WHOLE_HOUSE_PIN.y} to="/energy" />
+      {live.whole_house_pin ? (
+        <Label name="Whole House" value={formatWatts(live.whole_house_w)} x={live.whole_house_pin.x} y={live.whole_house_pin.y} to="/energy" />
+      ) : null}
       <Label name="Car charger (estimate)" value={chargerText(live.charger_estimate_w)} x={CHARGER_PIN.x} y={CHARGER_PIN.y} to="/energy" />
     </div>
   );
