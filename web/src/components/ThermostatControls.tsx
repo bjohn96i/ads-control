@@ -81,14 +81,22 @@ function Controls({ t, onError }: { t: ThermostatState; onError: (text: string |
   );
 }
 
-/** The reason a thermostat can't be changed, or its controls behind the PIN. Nothing when stale. */
-export function ThermostatControls({ t, onError }: { t: ThermostatState; onError: (text: string | null) => void }) {
+/**
+ * The reason a thermostat can't be changed, or its controls behind the PIN. Nothing when stale.
+ * gated=false is only for a caller that has already checked the PIN itself (the home A/C card).
+ */
+export function ThermostatControls({
+  t,
+  onError,
+  gated = true,
+}: {
+  t: ThermostatState;
+  onError: (text: string | null) => void;
+  gated?: boolean;
+}) {
   if (t.stale) return null;
   const reason = blocked(t);
   if (reason) return <p className="sub">{reason}</p>;
-  return (
-    <PinGate>
-      <Controls t={t} onError={onError} />
-    </PinGate>
-  );
+  const controls = <Controls t={t} onError={onError} />;
+  return gated ? <PinGate>{controls}</PinGate> : controls;
 }

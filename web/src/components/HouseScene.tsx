@@ -6,7 +6,7 @@ export type Room = { name: string; watts: number | null; flagged: boolean; pin_x
 
 // Whole House and the charger aren't circuits, so their places on the render live here.
 const WHOLE_HOUSE_PIN = { x: 65, y: 79 };
-const CHARGER_PIN = { x: 79, y: 62 };
+const CHARGER_PIN = { x: 82, y: 50 };
 
 /** One label per room: circuits in the same room add up; one stopped circuit makes the room unknown. */
 export function groupRooms(zones: LiveZone[]): Room[] {

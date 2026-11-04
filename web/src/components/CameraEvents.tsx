@@ -48,3 +48,20 @@ export function CameraEventTable({ events }: { events: CameraEvent[] }) {
     </div>
   );
 }
+
+/** The short form for the home page: camera and what happened on the left, the time on the right. */
+export function CameraEventList({ events }: { events: CameraEvent[] }) {
+  if (events.length === 0) return <p className="sub">No camera events yet.</p>;
+  return (
+    <>
+      {events.map((e) => (
+        <div key={`${e.camera_id}-${e.occurred_at}-${e.type}`} className="row">
+          <span>
+            <span>{e.camera}</span> · <span className="d">{label(e.type)}</span>
+          </span>
+          <span className="d">{new Date(e.occurred_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
+        </div>
+      ))}
+    </>
+  );
+}

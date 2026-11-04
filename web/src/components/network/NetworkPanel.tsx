@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { getJson, type Network } from "../../api/client";
 
 const Globe = lazy(() => import("./Globe"));
+const HOME_DEVICES = 3;
 
 function lanthornLink(base: string, params: Record<string, string> = {}): string {
   return `${base}/?${new URLSearchParams({ ...params, range: "24h" })}`;
@@ -34,14 +35,15 @@ export function NetworkPanel() {
   const lanthorn = (params?: Record<string, string>) => lanthornLink(data?.lanthorn_url ?? "", params);
 
   return (
-    <section className="panel network">
-      {data ? (
-        <a className="eyebrow" href={lanthorn()} target="_blank" rel="noopener">
-          NETWORK / LAST 24 HOURS
-        </a>
-      ) : (
-        <span className="eyebrow">NETWORK / LAST 24 HOURS</span>
-      )}
+    <section className="card network">
+      <div className="eyebrow">
+        <span>Network · Lanthorn</span>
+        {data ? (
+          <a className="go" href={lanthorn()} target="_blank" rel="noopener" aria-label="Open the network in Lanthorn">
+            ↗
+          </a>
+        ) : null}
+      </div>
       {isError ? (
         <p className="warn" role="alert">
           Lanthorn isn't reachable
@@ -56,7 +58,7 @@ export function NetworkPanel() {
                   arcs={data.arcs}
                   home={data.home}
                   width={width}
-                  height={200}
+                  height={110}
                   onCountryClick={(code) => open(lanthorn({ panel: `country:${code}` }))}
                   onGlobeClick={() => open(lanthorn())}
                 />
@@ -64,7 +66,7 @@ export function NetworkPanel() {
             ) : null}
           </div>
           <ol className="noisiest">
-            {data.top_devices.map((device) => (
+            {data.top_devices.slice(0, HOME_DEVICES).map((device) => (
               <li key={device.id}>
                 <a
                   href={lanthorn({ panel: `device:${encodeURIComponent(device.id)}` })}
@@ -73,9 +75,11 @@ export function NetworkPanel() {
                 >
                   {device.name}
                 </a>
-                <span>{device.queries.toLocaleString("en-US")}</span>
-                <span className="sub">
-                  {device.queries ? Math.round((100 * device.blocked) / device.queries) : 0}% blocked
+                <span className="count">
+                  <b>{device.queries.toLocaleString("en-US")}</b>
+                  <span className="d">
+                    {device.queries ? Math.round((100 * device.blocked) / device.queries) : 0}% blocked
+                  </span>
                 </span>
               </li>
             ))}
