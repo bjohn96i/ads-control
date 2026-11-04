@@ -139,3 +139,39 @@ async def test_zones_carry_room_and_floor(session, migrated_db):
     await _sample(session, FULL)
     dryer = next(z for z in (await _get(migrated_db))["zones"] if z["name"] == "Dryer")
     assert (dryer["room"], dryer["floor"]) == ("Laundry", "Basement")
+
+
+async def _outdoor(session, temp_c: float, at: datetime):
+    await session.execute(text("TRUNCATE outdoor_readings"))
+    await session.execute(text("INSERT INTO outdoor_readings VALUES (:t, :c)"), {"t": at, "c": temp_c})
+    await session.commit()
+
+
+async def test_outdoor_temperature_in_fahrenheit(session, migrated_db):
+    await _outdoor(session, 20.0, NOW - timedelta(hours=1))
+    assert (await _get(migrated_db))["outdoor_f"] == pytest.approx(68)
+
+
+async def test_old_outdoor_temperature_is_left_out(session, migrated_db):
+    await _outdoor(session, 20.0, NOW - timedelta(hours=4))
+    assert (await _get(migrated_db))["outdoor_f"] is None
+
+
+async def test_today_energy_counts_from_local_midnight(session, migrated_db):
+    # 3 AM UTC is 11 PM Eastern the night before, so it isn't today.
+    await _sample(session, {**FULL, 1: 2000.0}, datetime(2026, 7, 15, 3, 0, tzinfo=timezone.utc))
+    before = await _get(migrated_db)
+    assert before["today_kwh"] == 0
+    await _sample(session, {**FULL, 1: 2000.0}, NOW - timedelta(minutes=10))
+    after = await _get(migrated_db)
+    assert after["today_kwh"] > 0
+    assert after["today_cost"] > 0
+
+
+async def test_recent_line_is_one_point_per_minute(session, migrated_db):
+    await _sample(session, {**FULL, 1: 1000.0}, NOW - timedelta(seconds=90))
+    await _sample(session, {**FULL, 1: 3000.0}, NOW - timedelta(seconds=30))
+    await _sample(session, {**FULL, 1: 9000.0}, NOW - timedelta(hours=2))
+    line = (await _get(migrated_db))["recent_w"]
+    assert [p["watts"] for p in line] == [pytest.approx(1000), pytest.approx(3000)]
+    assert line[0]["time"] < line[1]["time"]

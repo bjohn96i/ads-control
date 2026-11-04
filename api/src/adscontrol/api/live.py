@@ -16,6 +16,8 @@ STALE_AFTER_S = 30
 # that no zone explains, held long enough that it is not an A/C or motor starting up.
 CHARGER_WINDOW = timedelta(seconds=35)
 CHARGER_MIN_SAMPLES = 3
+OUTDOOR_STALE = timedelta(hours=3)
+RECENT_LINE = timedelta(hours=1)
 
 router = APIRouter()
 
@@ -31,6 +33,21 @@ _LATEST = text(
 _RECENT = text(
     """
     SELECT time, channel, power_w FROM channel_readings WHERE time > :since AND time <= :now
+    """
+)
+
+
+_OUTDOOR = text(
+    "SELECT time, temp_c FROM outdoor_readings WHERE time <= :now ORDER BY time DESC LIMIT 1"
+)
+
+# Each sample's incoming channels summed first, then averaged per minute.
+_LINE = text(
+    """
+    SELECT time_bucket('1 minute', time) AS minute, avg(watts) AS watts FROM (
+        SELECT time, sum(power_w) AS watts FROM channel_readings
+        WHERE channel = ANY(:channels) AND time > :since AND time <= :now GROUP BY time
+    ) samples GROUP BY 1 ORDER BY 1
     """
 )
 
@@ -54,6 +71,10 @@ def _month_start(now: datetime) -> datetime:
     return now.astimezone(LOCAL).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
+def _day_start(now: datetime) -> datetime:
+    return now.astimezone(LOCAL).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 @router.get("/api/live")
 async def live(request: Request) -> dict:
     now: datetime = request.app.state.clock()
@@ -66,6 +87,19 @@ async def live(request: Request) -> dict:
         month = await energy_by_zone(session, _month_start(now), now)
         flags = await open_findings(session)
         recent = (await session.execute(_RECENT, {"since": now - CHARGER_WINDOW, "now": now})).all()
+        today = await energy_by_zone(session, _day_start(now), now)
+        outdoor = (await session.execute(_OUTDOOR, {"now": now})).first()
+        incoming = next((z for z in zones if z.kind == "incoming"), None)
+        line = (
+            []
+            if incoming is None
+            else (
+                await session.execute(
+                    _LINE,
+                    {"channels": incoming.channels, "since": now - RECENT_LINE, "now": now},
+                )
+            ).all()
+        )
 
     as_of = max((r.time for r in rows), default=None)
     stale = as_of is None or (now - as_of).total_seconds() > STALE_AFTER_S
@@ -82,6 +116,8 @@ async def live(request: Request) -> dict:
     )
     period = rate_period(now)
     month_whole = next((e for e in month if e.name == "Whole House"), None)
+    today_whole = next((e for e in today if e.name == "Whole House"), None)
+    fresh_outdoor = outdoor is not None and now - outdoor.time <= OUTDOOR_STALE
     return {
         "as_of": as_of,
         "stale": stale,
@@ -107,4 +143,11 @@ async def live(request: Request) -> dict:
         ],
         "month_kwh": month_whole.kwh if month_whole else 0.0,
         "month_coverage": month_whole.coverage if month_whole else 0.0,
+        "outdoor_f": outdoor.temp_c * 9 / 5 + 32 if fresh_outdoor else None,
+        "today_kwh": today_whole.kwh if today_whole else 0.0,
+        "today_cost": today_whole.est_cost if today_whole else 0.0,
+        "recent_w": [
+            {"time": r.minute, "watts": r.watts * (incoming.multiplier if incoming else 1)}
+            for r in line
+        ],
     }
