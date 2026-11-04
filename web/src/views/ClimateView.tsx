@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -11,8 +11,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ApiError, getJson, send } from "../api/client";
-import { PinGate } from "../components/PinGate";
+import { getJson } from "../api/client";
+import { ThermostatControls } from "../components/ThermostatControls";
 
 type Point = {
   time: string;
@@ -55,68 +55,6 @@ function statusText(t: ThermostatView): string {
   return "Idle";
 }
 
-function blocked(t: ThermostatView): string | null {
-  if (t.stale) return null;
-  if (!t.online) return "This thermostat is offline.";
-  if (t.eco) return "This thermostat is in Eco mode. Turn Eco off in the Google Home app to change it here.";
-  if (t.mode === "OFF") return "This thermostat is off.";
-  return null;
-}
-
-function Controls({ t, onError }: { t: ThermostatView; onError: (text: string | null) => void }) {
-  const client = useQueryClient();
-  const range = t.mode === "HEATCOOL";
-  const [target, setTarget] = useState<"heat" | "cool">("heat");
-  const current = range ? (target === "heat" ? t.heat_f : t.cool_f) : t.setpoint_f;
-  const [choice, setChoice] = useState<number | null>(null);
-  const shown = choice ?? (current === null ? null : Math.round(current));
-  if (shown === null) return null;
-
-  const save = async () => {
-    try {
-      await send("POST", `/api/climate/${t.id}/setpoint`, {
-        temp_f: shown,
-        ...(range ? { target } : {}),
-      });
-      onError(null);
-      setChoice(null);
-      client.invalidateQueries({ queryKey: ["climate"] });
-    } catch (failure) {
-      onError(
-        failure instanceof ApiError && failure.status === 401
-          ? "Not changed. Enter the PIN again."
-          : "Not changed. Check the thermostat's state and try again.",
-      );
-    }
-  };
-
-  return (
-    <div className="task-actions">
-      {range ? (
-        <>
-          <button type="button" aria-pressed={target === "heat"} onClick={() => { setTarget("heat"); setChoice(null); }}>
-            Heat
-          </button>
-          <button type="button" aria-pressed={target === "cool"} onClick={() => { setTarget("cool"); setChoice(null); }}>
-            Cool
-          </button>
-        </>
-      ) : null}
-      <button type="button" aria-label="Cooler" disabled={shown <= 50} onClick={() => setChoice(shown - 1)}>
-        −
-      </button>
-      <button type="button" aria-label="Warmer" disabled={shown >= 90} onClick={() => setChoice(shown + 1)}>
-        +
-      </button>
-      {choice !== null && choice !== Math.round(current ?? choice) ? (
-        <button type="button" onClick={save}>
-          Set to {shown}°
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
 function Chart({ points }: { points: Point[] }) {
   return (
     <div className="chart" data-testid="climate-chart">
@@ -148,7 +86,6 @@ function Chart({ points }: { points: Point[] }) {
 }
 
 function ThermostatCard({ t, onError }: { t: ThermostatView; onError: (text: string | null) => void }) {
-  const reason = blocked(t);
   return (
     <article className="panel task">
       <h2>{t.name}</h2>
@@ -171,12 +108,7 @@ function ThermostatCard({ t, onError }: { t: ThermostatView; onError: (text: str
       {t.on_peak_flag ? (
         <p className="warn">The A/C is running hard during on-peak hours, your most expensive power.</p>
       ) : null}
-      {reason ? <p className="sub">{reason}</p> : null}
-      {!t.stale && !reason ? (
-        <PinGate>
-          <Controls t={t} onError={onError} />
-        </PinGate>
-      ) : null}
+      <ThermostatControls t={t} onError={onError} />
       <Chart points={t.timeline} />
       {t.estimate ? (
         <p className="sub">
