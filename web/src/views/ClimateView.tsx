@@ -60,25 +60,25 @@ function Chart({ points }: { points: Point[] }) {
     <div className="chart" data-testid="climate-chart">
       <ResponsiveContainer width="100%" height={240}>
         <ComposedChart data={points}>
-          <CartesianGrid stroke="#354331" vertical={false} />
+          <CartesianGrid stroke="#233026" vertical={false} />
           <XAxis
             dataKey="time"
-            tick={{ fill: "#9fac93", fontSize: 10 }}
+            tick={{ fill: "#8f988f", fontSize: 10 }}
             tickFormatter={(value: string) =>
               new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric" })
             }
             minTickGap={50}
           />
-          <YAxis yAxisId="temp" tick={{ fill: "#9fac93", fontSize: 10 }} width={36} unit="°" domain={["auto", "auto"]} />
-          <YAxis yAxisId="watts" orientation="right" tick={{ fill: "#9fac93", fontSize: 10 }} width={46} unit=" W" />
+          <YAxis yAxisId="temp" tick={{ fill: "#8f988f", fontSize: 10 }} width={36} unit="°" domain={["auto", "auto"]} />
+          <YAxis yAxisId="watts" orientation="right" tick={{ fill: "#8f988f", fontSize: 10 }} width={46} unit=" W" />
           <Tooltip
-            contentStyle={{ background: "#192119", border: "1px solid #354331" }}
+            contentStyle={{ background: "#121a14", border: "1px solid #233026" }}
             labelFormatter={(value) => new Date(String(value)).toLocaleString("en-US")}
           />
-          <Bar yAxisId="watts" dataKey="ac_watts" name="A/C circuit" fill="#d7997155" isAnimationActive={false} />
-          <Line yAxisId="temp" dataKey="ambient_f" name="Inside" stroke="#e5e8d9" dot={false} connectNulls={false} isAnimationActive={false} />
-          <Line yAxisId="temp" dataKey="setpoint_f" name="Set to" stroke="#d3b877" strokeDasharray="4 3" dot={false} connectNulls={false} isAnimationActive={false} />
-          <Line yAxisId="temp" dataKey="outdoor_f" name="Outside" stroke="#8aaeb0" dot={false} connectNulls isAnimationActive={false} />
+          <Bar yAxisId="watts" dataKey="ac_watts" name="A/C circuit" fill="#f2b45a33" isAnimationActive={false} />
+          <Line yAxisId="temp" dataKey="ambient_f" name="Inside" stroke="#ece6da" dot={false} connectNulls={false} isAnimationActive={false} />
+          <Line yAxisId="temp" dataKey="setpoint_f" name="Set to" stroke="#f2b45a" strokeDasharray="4 3" dot={false} connectNulls={false} isAnimationActive={false} />
+          <Line yAxisId="temp" dataKey="outdoor_f" name="Outside" stroke="#8f988f" dot={false} connectNulls isAnimationActive={false} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -137,19 +137,19 @@ export function ClimateView() {
     <main className="page">
       <header className="top">
         <h1>Climate</h1>
+        <div className="seg">
+          {RANGES.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={range === option.value}
+              onClick={() => setParams({ range: option.value })}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </header>
-      <div className="task-actions range">
-        {RANGES.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={range === option.value}
-            onClick={() => setParams({ range: option.value })}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
       <p className="sub">A change here lasts like one made on the thermostat. The Nest schedule isn't changed.</p>
       <p className="sub">Gas heat isn't measured here, so winter shows only what runs on electricity.</p>
       {error ? (

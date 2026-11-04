@@ -247,7 +247,7 @@ export function MaintenanceView() {
           onError={setFailed}
         />
       ) : null}
-      <div className="tasks">
+      <div className="tasks two">
         {data?.tasks.map((task) => (
           <TaskCard
             key={task.id}

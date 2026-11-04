@@ -202,6 +202,9 @@ a.traffic-cam:hover { border-color: var(--line-hover); }
 
 /* lists: maintenance, bills, climate */
 .tasks { display: grid; gap: 14px; }
+.tasks.two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); align-items: start; }
+.top .meta a { text-decoration: none; }
+.top .meta a:hover { color: var(--amber); }
 .tasks.climate { grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); }
 .task { padding: 16px; }
 .task.overdue { box-shadow: inset 2px 0 0 var(--amber); }
@@ -235,4 +238,11 @@ a.traffic-cam:hover { border-color: var(--line-hover); }
   .stage, .split, .stats { grid-template-columns: minmax(0, 1fr); }
   .scene { width: 100%; order: -1; }
   .traffic, .house-cams { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* A normal browser window is shorter than fullscreen: drop the globe and flatten the traffic row so home still fits. */
+@media (min-width: 1201px) and (max-height: 1000px) {
+  .stage .network-globe { display: none; }
+  .traffic-cam { aspect-ratio: 3 / 1; }
+  .scene { width: min(100%, calc((100vh - 250px) * 1586 / 992)); }
 }
