@@ -120,8 +120,10 @@ def create_app(
             if path.startswith("api/"):
                 raise HTTPException(status_code=404)
             candidate = (web_dir / path).resolve()
+            # These keep their names across builds, so the browser must check for a new one.
+            fresh = {"Cache-Control": "no-cache"}
             if candidate.is_file() and candidate.is_relative_to(web_dir.resolve()):
-                return FileResponse(candidate)
-            return FileResponse(web_dir / "index.html")
+                return FileResponse(candidate, headers=fresh)
+            return FileResponse(web_dir / "index.html", headers=fresh)
 
     return app

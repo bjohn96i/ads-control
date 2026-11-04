@@ -31,3 +31,9 @@ def test_unknown_api_path_is_404_not_the_page(tmp_path):
 def test_path_traversal_gets_the_page_not_the_file(tmp_path):
     (tmp_path.parent / "secret.txt").write_text("secret")
     assert "secret" not in _client(tmp_path).get("/..%2Fsecret.txt").text
+
+
+def test_page_and_unhashed_files_are_rechecked_so_a_rebuild_shows_up(tmp_path):
+    client = _client(tmp_path)
+    assert client.get("/energy").headers["cache-control"] == "no-cache"
+    assert client.get("/house.svg").headers["cache-control"] == "no-cache"
