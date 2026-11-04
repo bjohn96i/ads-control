@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { Live } from "../api/client";
 import { PERIOD_LABEL } from "./format";
 
@@ -74,16 +75,34 @@ function Glyph({ icon }: { icon: Icon }) {
   );
 }
 
-/** Outside now, and the electricity rate, for the corner of the house picture. */
+function useNow(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  return now;
+}
+
+/** The time, outside now, and the electricity rate, for the corner of the house picture. */
 export function Weather({ live }: { live: Live }) {
+  const clock = useNow();
   const now = live.outdoor_code === null ? null : weatherOf(live.outdoor_code, live.outdoor_is_day ?? true);
   return (
     <div className="weather">
-      {now ? <Glyph icon={now.icon} /> : null}
-      <div>
-        {live.outdoor_f !== null ? <b>{Math.round(live.outdoor_f)}°F</b> : null}
-        {now ? <span>{now.label}</span> : null}
-        <span>{PERIOD_LABEL[live.rate_period]}</span>
+      <div className="clock">
+        <b>{clock.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</b>
+        <span>{clock.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
+      </div>
+      <div className="now">
+        {now ? <Glyph icon={now.icon} /> : null}
+        <div>
+          {live.outdoor_f !== null ? <b>{Math.round(live.outdoor_f)}°F</b> : null}
+          <div className="sub">
+            {now ? <span>{now.label}</span> : null}
+            <span>{PERIOD_LABEL[live.rate_period]}</span>
+          </div>
+        </div>
       </div>
     </div>
   );

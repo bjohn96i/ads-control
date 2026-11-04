@@ -1,12 +1,22 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Live } from "../api/client";
 import { Weather, weatherOf } from "./Weather";
 
 const live = (over: Partial<Live>) =>
   ({ outdoor_f: 68.4, outdoor_code: 61, outdoor_is_day: true, rate_period: "off_peak", ...over }) as Live;
 
+afterEach(() => vi.useRealTimers());
+
 describe("Weather", () => {
+  it("shows the date and time", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 4, 12, 31));
+    render(<Weather live={live({})} />);
+    expect(screen.getByText("12:31 PM")).toBeInTheDocument();
+    expect(screen.getByText("Wed, Nov 4")).toBeInTheDocument();
+  });
+
   it("shows the temperature, the conditions and the rate", () => {
     render(<Weather live={live({})} />);
     expect(screen.getByText("68°F")).toBeInTheDocument();

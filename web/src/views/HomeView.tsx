@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { type CameraEvent, getJson, type Live, type TrafficCamera } from "../api/client";
 import { CameraEventList } from "../components/CameraEvents";
@@ -8,17 +7,7 @@ import { HouseScene } from "../components/HouseScene";
 import { NetworkPanel } from "../components/network/NetworkPanel";
 import { TrafficCams } from "../components/TrafficCams";
 
-function useNow(): Date {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(timer);
-  }, []);
-  return now;
-}
-
 export function HomeView() {
-  const now = useNow();
   const { data, isError } = useQuery({
     queryKey: ["live"],
     queryFn: () => getJson<Live>("/api/live"),
@@ -38,9 +27,6 @@ export function HomeView() {
     <main className="page">
       <header className="top">
         <h1>Home</h1>
-        <span className="meta">
-          {now.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-        </span>
       </header>
       {isError ? <p className="warn" role="alert">Can't reach the house server</p> : null}
       {data ? (
