@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { ApiError, getJson, type MaintenanceTask, send } from "../api/client";
 import { dueText } from "../components/format";
 import { type Act, AddTask, TaskEditor } from "../components/TaskEditor";
@@ -203,13 +202,10 @@ export function MaintenanceView() {
   };
 
   return (
-    <main className="home">
-      <header>
-        <div className="eyebrow">HOUSE / MAINTENANCE</div>
-        <h1>What needs doing?</h1>
-        <p className="sub">
-          <Link to="/">Back to the house</Link> · <a href="/api/maintenance/export">Back up the list</a>
-        </p>
+    <main className="page">
+      <header className="top">
+        <h1>Maintenance</h1>
+        <span className="meta"><a href="/api/maintenance/export">Back up the list</a></span>
       </header>
       {who ? null : (
         <div className="who">

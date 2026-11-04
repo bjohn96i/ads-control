@@ -26,10 +26,9 @@ export function HomeView() {
   });
 
   return (
-    <main className="home">
-      <header>
-        <div className="eyebrow">HOUSE / LIVE</div>
-        <h1>What's happening at home?</h1>
+    <main className="page">
+      <header className="top">
+        <h1>Home</h1>
       </header>
       {isError ? <p className="warn" role="alert">Can't reach the house server</p> : null}
       {data ? (

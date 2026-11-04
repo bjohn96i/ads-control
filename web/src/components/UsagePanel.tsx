@@ -1,11 +1,5 @@
-import type { Live, RatePeriod } from "../api/client";
-import { formatWatts } from "./format";
-
-const PERIOD_LABEL: Record<RatePeriod, string> = {
-  on_peak: "On-peak",
-  off_peak: "Off-peak",
-  super_off_peak: "Super off-peak",
-};
+import type { Live } from "../api/client";
+import { formatWatts, PERIOD_LABEL } from "./format";
 
 export function UsagePanel({ live }: { live: Live }) {
   return (

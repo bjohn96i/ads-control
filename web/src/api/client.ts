@@ -4,6 +4,8 @@ export type LiveZone = {
   watts: number | null;
   pin_x: number;
   pin_y: number;
+  room: string | null;
+  floor: string | null;
   flagged: boolean;
 };
 
@@ -20,6 +22,10 @@ export type Live = {
   zones: LiveZone[];
   month_kwh: number;
   month_coverage: number;
+  outdoor_f: number | null;
+  today_kwh: number;
+  today_cost: number;
+  recent_w: { time: string; watts: number }[];
 };
 
 export async function getJson<T>(path: string): Promise<T> {

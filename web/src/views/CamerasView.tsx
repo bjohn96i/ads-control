@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { type CameraEvent, type CameraInfo, getJson, send, type TrafficCamera } from "../api/client";
 import { CameraEventTable, eventText } from "../components/CameraEvents";
 import { PinGate } from "../components/PinGate";
@@ -121,13 +120,9 @@ export function CamerasView() {
   });
 
   return (
-    <main className="home">
-      <header>
-        <div className="eyebrow">HOUSE / CAMERAS</div>
-        <h1>Eyes on the house</h1>
-        <p className="sub">
-          <Link to="/">Back to the house</Link>
-        </p>
+    <main className="page">
+      <header className="top">
+        <h1>Cameras</h1>
       </header>
       {isError ? (
         <p className="warn" role="alert">

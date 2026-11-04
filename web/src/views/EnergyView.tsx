@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getJson } from "../api/client";
 import { formatWatts } from "../components/format";
@@ -116,13 +116,9 @@ export function EnergyView() {
   });
 
   return (
-    <main className="home">
-      <header>
-        <div className="eyebrow">HOUSE / ENERGY</div>
-        <h1>Where the power goes</h1>
-        <p className="sub">
-          <Link to="/">Back to the house</Link>
-        </p>
+    <main className="page">
+      <header className="top">
+        <h1>Energy</h1>
       </header>
       <div className="task-actions range">
         {RANGES.map((option) => (

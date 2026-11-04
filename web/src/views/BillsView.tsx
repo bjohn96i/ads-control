@@ -1,6 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { Link } from "react-router-dom";
 import { ApiError, getJson, send } from "../api/client";
 
 type Fields = {
@@ -212,13 +211,10 @@ export function BillsView() {
   };
 
   return (
-    <main className="home">
-      <header>
-        <div className="eyebrow">HOUSE / BILLS</div>
-        <h1>What power really costs</h1>
-        <p className="sub">
-          <Link to="/">Back to the house</Link> · <a href="/api/bills/export">Back up the bills</a>
-        </p>
+    <main className="page">
+      <header className="top">
+        <h1>Bills</h1>
+        <span className="meta"><a href="/api/bills/export">Back up the bills</a></span>
       </header>
       <div className="task-actions">
         <label className="upload">

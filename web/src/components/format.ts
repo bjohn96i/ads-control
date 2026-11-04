@@ -1,3 +1,5 @@
+import type { RatePeriod } from "../api/client";
+
 export function formatWatts(watts: number | null): string {
   if (watts === null) return "—";
   return watts >= 1000 ? `${(watts / 1000).toFixed(1)} kW` : `${Math.round(watts)} W`;
@@ -12,3 +14,9 @@ export function dueText(nextDue: string | null, overdue: boolean): string | null
   });
   return overdue ? `Overdue since ${when}` : `Due ${when}`;
 }
+
+export const PERIOD_LABEL: Record<RatePeriod, string> = {
+  on_peak: "On-peak",
+  off_peak: "Off-peak",
+  super_off_peak: "Super off-peak",
+};

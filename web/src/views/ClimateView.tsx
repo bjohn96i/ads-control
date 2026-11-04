@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import {
   Bar,
   CartesianGrid,
@@ -134,13 +134,9 @@ export function ClimateView() {
   });
 
   return (
-    <main className="home">
-      <header>
-        <div className="eyebrow">HOUSE / CLIMATE</div>
-        <h1>Temperature and what it costs</h1>
-        <p className="sub">
-          <Link to="/">Back to the house</Link>
-        </p>
+    <main className="page">
+      <header className="top">
+        <h1>Climate</h1>
       </header>
       <div className="task-actions range">
         {RANGES.map((option) => (
