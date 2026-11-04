@@ -146,6 +146,7 @@ async def live(request: Request) -> dict:
         "outdoor_f": outdoor.temp_c * 9 / 5 + 32 if fresh_outdoor else None,
         "today_kwh": today_whole.kwh if today_whole else 0.0,
         "today_cost": today_whole.est_cost if today_whole else 0.0,
+        "today_coverage": today_whole.coverage if today_whole else 0.0,
         "recent_w": [
             {"time": r.minute, "watts": r.watts * (incoming.multiplier if incoming else 1)}
             for r in line

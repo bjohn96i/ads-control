@@ -18,6 +18,14 @@ function when(at: string): string {
   });
 }
 
+/** Just the time for today's events; older ones keep their day. */
+function shortWhen(at: string): string {
+  const date = new Date(at);
+  return date.toDateString() === new Date().toDateString()
+    ? date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    : when(at);
+}
+
 export function eventText(camera: CameraInfo): string {
   if (!camera.last_event || !camera.last_event_at) return "No events yet";
   return `${label(camera.last_event)}, ${when(camera.last_event_at)}`;
@@ -59,7 +67,7 @@ export function CameraEventList({ events }: { events: CameraEvent[] }) {
           <span>
             <span>{e.camera}</span> · <span className="d">{label(e.type)}</span>
           </span>
-          <span className="d">{new Date(e.occurred_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
+          <span className="d">{shortWhen(e.occurred_at)}</span>
         </div>
       ))}
     </>

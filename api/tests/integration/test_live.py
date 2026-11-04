@@ -175,3 +175,9 @@ async def test_recent_line_is_one_point_per_minute(session, migrated_db):
     line = (await _get(migrated_db))["recent_w"]
     assert [p["watts"] for p in line] == [pytest.approx(1000), pytest.approx(3000)]
     assert line[0]["time"] < line[1]["time"]
+
+
+async def test_today_reports_how_much_was_recorded(session, migrated_db):
+    await _sample(session, {**FULL, 1: 2000.0}, NOW - timedelta(minutes=10))
+    body = await _get(migrated_db)
+    assert 0 < body["today_coverage"] < 0.01

@@ -17,6 +17,7 @@ const LIVE = {
   outdoor_f: 68,
   today_kwh: 31.4,
   today_cost: 4.12,
+  today_coverage: 0.98,
   recent_w: [
     { time: "2026-11-02T04:58:00Z", watts: 1500 },
     { time: "2026-11-02T04:59:00Z", watts: 1600 },
@@ -142,6 +143,26 @@ describe("HomeView", () => {
     renderHome({ ...LIVE, stale: true, charger_estimate_w: null });
     const pin = await screen.findByRole("link", { name: /Car charger/ });
     expect(within(pin).getByText("—")).toBeInTheDocument();
+  });
+
+  it("power_card_warns_when_today_is_only_partly_recorded", async () => {
+    renderHome({ ...LIVE, today_coverage: 0.5 });
+    const card = (await screen.findByText("Power now")).closest("a")!;
+    expect(within(card).getByText(/50% recorded/)).toBeInTheDocument();
+  });
+
+  it("power_card_shows_a_dash_when_nothing_was_recorded_today", async () => {
+    renderHome({ ...LIVE, today_kwh: 0, today_cost: 0, today_coverage: 0 });
+    const card = (await screen.findByText("Power now")).closest("a")!;
+    expect(within(card).getByText("Today —")).toBeInTheDocument();
+    expect(within(card).queryByText(/\$0\.00/)).not.toBeInTheDocument();
+  });
+
+  it("older_camera_events_show_their_day", async () => {
+    renderHome(LIVE, true, [], null, [], [
+      { camera_id: 2, camera: "Entryway doorbell", type: "chime", occurred_at: "2026-01-02T19:14:00Z" },
+    ]);
+    expect(await screen.findByText(/Jan 2/)).toBeInTheDocument();
   });
 
   it("maintenance_shows_the_next_three", async () => {

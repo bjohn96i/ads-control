@@ -82,11 +82,11 @@ function ZonePanel({ zoneId, range, place }: { zoneId: string; range: string; pl
   if (!data) return null;
   return (
     <section className="card zone-panel">
-      <div
-        className="photo"
-        data-testid="zone-photo"
-        style={place ? { backgroundPosition: `${place.pin_x}% ${place.pin_y}%` } : undefined}
-      />
+      <div className="photo" data-testid="zone-photo">
+        {place ? (
+          <img src="/house.jpg" alt="" style={{ transform: `translate(-${place.pin_x}%, -${place.pin_y}%)` }} />
+        ) : null}
+      </div>
       <div className="body">
         <div className="eyebrow" data-testid="zone-where">
           {where(place)}

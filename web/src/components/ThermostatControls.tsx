@@ -46,6 +46,8 @@ function Controls({ t, onError }: { t: ThermostatState; onError: (text: string |
       client.invalidateQueries({ queryKey: ["climate"] });
       client.invalidateQueries({ queryKey: ["climate-summary"] });
     } catch (failure) {
+      // The session may have run out: check again so the PIN form comes back.
+      if (failure instanceof ApiError && failure.status === 401) client.invalidateQueries({ queryKey: ["auth-status"] });
       onError(
         failure instanceof ApiError && failure.status === 401
           ? "Not changed. Enter the PIN again."

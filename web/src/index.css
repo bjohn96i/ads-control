@@ -195,7 +195,9 @@ a.traffic-cam:hover { border-color: var(--line-hover); }
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
 .zone-panel { padding: 0; overflow: hidden; }
-.zone-panel .photo { height: 190px; background: url(/house.jpg) no-repeat; background-size: 280%; position: relative; }
+.zone-panel .photo { height: 190px; position: relative; overflow: hidden; }
+/* The zone's spot on the picture lands at the box's focal point, above the fade. */
+.zone-panel .photo img { position: absolute; left: 50%; top: 40%; width: 280%; max-width: none; }
 .zone-panel .photo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 40%, var(--panel)); }
 .zone-panel .body { padding: 0 16px 16px; margin-top: -34px; position: relative; }
 .zone-panel h2 { font-size: 20px; }

@@ -25,6 +25,7 @@ export type Live = {
   outdoor_f: number | null;
   today_kwh: number;
   today_cost: number;
+  today_coverage: number;
   recent_w: { time: string; watts: number }[];
 };
 

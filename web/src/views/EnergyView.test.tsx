@@ -153,8 +153,10 @@ describe("EnergyView", () => {
   it("the_crop_is_centred_on_the_zones_label", async () => {
     show(RANKING, "/energy?zone=12");
     await screen.findByRole("heading", { name: "Water Heater" });
-    const photo = await screen.findByTestId("zone-photo");
-    await vi.waitFor(() => expect(photo.style.backgroundPosition).toBe("56% 92%"));
+    // The picture is moved so the zone's spot sits at the box's focal point, not its edge.
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("zone-photo").querySelector("img")!.style.transform).toBe("translate(-56%, -92%)"),
+    );
   });
 
   it("eyebrow_names_floor_and_room", async () => {

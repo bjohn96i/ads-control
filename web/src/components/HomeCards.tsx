@@ -123,6 +123,8 @@ export function BillCard() {
   );
 }
 
+const COVERAGE_WARN = 0.9;
+
 function sparkPoints(line: Live["recent_w"]): string {
   if (line.length === 0) return "";
   const values = line.map((p) => p.watts);
@@ -144,9 +146,19 @@ export function PowerCard({ live }: { live: Live }) {
       <svg className="spark" viewBox="0 0 240 44" preserveAspectRatio="none" aria-hidden="true">
         <polyline fill="none" stroke="var(--amber)" strokeWidth="1.5" points={sparkPoints(live.recent_w)} />
       </svg>
+      {/* Gaps never read as low use: nothing recorded shows a dash, a partial day says how partial. */}
       <div className="row">
-        <span className="d">Today {Math.round(live.today_kwh)} kWh</span>
-        <span className="d">≈ ${live.today_cost.toFixed(2)}</span>
+        {live.today_coverage > 0 ? (
+          <>
+            <span className="d">
+              Today {Math.round(live.today_kwh)} kWh
+              {live.today_coverage < COVERAGE_WARN ? `, ${Math.round(live.today_coverage * 100)}% recorded` : ""}
+            </span>
+            <span className="d">≈ ${live.today_cost.toFixed(2)}</span>
+          </>
+        ) : (
+          <span className="d">Today —</span>
+        )}
       </div>
     </Link>
   );
