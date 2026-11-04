@@ -34,15 +34,28 @@ const ZONE = {
   flags: [],
 };
 
+const LIVE = {
+  zones: [
+    { id: 3, name: "Dishwasher", watts: 5, pin_x: 33, pin_y: 35, room: "Kitchen", floor: "1st floor", flagged: false },
+    { id: 4, name: "Dryer", watts: 0, pin_x: 25, pin_y: 80, room: "Laundry", floor: "Basement", flagged: false },
+    { id: 12, name: "Water Heater", watts: 0, pin_x: 56, pin_y: 92, room: "Water Heater", floor: "Basement", flagged: false },
+  ],
+};
+
 function Where() {
   return <div data-testid="where">{useLocation().search}</div>;
 }
 
+const zoneName = (url: string) =>
+  ({ 3: "Dishwasher", 4: "Dryer", 12: "Water Heater" })[Number(url.split("/").pop()!.split("?")[0])] ?? "Zone";
+
 function show(ranking: unknown = RANKING, entry = "/energy") {
   const fetchMock = vi.fn(async (url: string) =>
-    url.startsWith("/api/energy/zones/")
-      ? new Response(JSON.stringify(ZONE))
-      : new Response(JSON.stringify(ranking)),
+    url === "/api/live"
+      ? new Response(JSON.stringify(LIVE))
+      : url.startsWith("/api/energy/zones/")
+        ? new Response(JSON.stringify({ ...ZONE, id: Number(url.split("/").pop()!.split("?")[0]), name: zoneName(url) }))
+        : new Response(JSON.stringify(ranking)),
   );
   vi.stubGlobal("fetch", fetchMock);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -76,7 +89,8 @@ describe("EnergyView", () => {
   it("labels_costs_as_estimates", async () => {
     show();
     expect(await screen.findByRole("columnheader", { name: /estimated cost/i })).toBeInTheDocument();
-    expect(screen.getByText(/\$90\.00 estimated/i)).toBeInTheDocument();
+    const cost = screen.getByText("Estimated cost", { selector: ".eyebrow" }).closest<HTMLElement>(".card")!;
+    expect(within(cost).getByText("$90")).toBeInTheDocument();
   });
 
   it("shows_charger_and_unmetered_lines_with_the_charger_marked_estimate", async () => {
@@ -128,6 +142,29 @@ describe("EnergyView", () => {
     show(RANKING, "/energy?zone=3");
     expect(await screen.findByText(/risen from 1\.0 to 2\.0/)).toBeInTheDocument();
     ZONE.flags = [];
+  });
+
+  it("shows_the_biggest_zone_when_none_is_picked", async () => {
+    show({ ...RANKING, zones: [{ id: 12, name: "Water Heater", ...line(200, 30, 0.4) }, ...RANKING.zones] });
+    expect(await screen.findByRole("heading", { name: "Water Heater" })).toBeInTheDocument();
+    expect(screen.getByTestId("where")).not.toHaveTextContent("zone=");
+  });
+
+  it("the_crop_is_centred_on_the_zones_label", async () => {
+    show(RANKING, "/energy?zone=12");
+    await screen.findByRole("heading", { name: "Water Heater" });
+    const photo = await screen.findByTestId("zone-photo");
+    await vi.waitFor(() => expect(photo.style.backgroundPosition).toBe("56% 92%"));
+  });
+
+  it("eyebrow_names_floor_and_room", async () => {
+    show(RANKING, "/energy?zone=4");
+    await vi.waitFor(() => expect(screen.getByTestId("zone-where")).toHaveTextContent(/^Basement · Laundry$/));
+  });
+
+  it("eyebrow_is_just_the_floor_when_the_room_is_the_zone", async () => {
+    show(RANKING, "/energy?zone=12");
+    await vi.waitFor(() => expect(screen.getByTestId("zone-where")).toHaveTextContent(/^Basement$/));
   });
 
   it("failed_load_says_so", async () => {

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getJson } from "../api/client";
+import { getJson, type Live, type LiveZone } from "../api/client";
 import { formatWatts } from "../components/format";
 
 type EnergyLine = { kwh: number; est_cost: number; share: number; coverage: number };
@@ -30,9 +30,23 @@ const COVERAGE_WARN = 0.9;
 const kwh = (value: number) => `${value < 10 ? value.toFixed(1) : Math.round(value)} kWh`;
 const dollars = (value: number) => `$${value.toFixed(2)}`;
 
-function Row({ name, line, onOpen }: { name: string; line: EnergyLine; onOpen?: () => void }) {
+function Row({
+  name,
+  line,
+  onOpen,
+  selected = false,
+  flagged = false,
+  quiet = false,
+}: {
+  name: string;
+  line: EnergyLine;
+  onOpen?: () => void;
+  selected?: boolean;
+  flagged?: boolean;
+  quiet?: boolean;
+}) {
   return (
-    <tr>
+    <tr className={selected ? "sel" : quiet ? "quiet" : undefined}>
       <td>
         {onOpen ? (
           <button type="button" className="link" onClick={onOpen}>
@@ -41,9 +55,10 @@ function Row({ name, line, onOpen }: { name: string; line: EnergyLine; onOpen?: 
         ) : (
           name
         )}
+        {flagged ? <span className="flagdot" aria-label="Unusual" /> : null}
       </td>
-      <td>{kwh(line.kwh)}</td>
-      <td>{dollars(line.est_cost)}</td>
+      <td className="n">{kwh(line.kwh)}</td>
+      <td className="n">{dollars(line.est_cost)}</td>
       <td>
         <span className="share" aria-hidden="true">
           <i style={{ width: `${Math.min(100, line.share * 100)}%` }} />
@@ -54,46 +69,61 @@ function Row({ name, line, onOpen }: { name: string; line: EnergyLine; onOpen?: 
   );
 }
 
-function ZonePanel({ zoneId, range }: { zoneId: string; range: string }) {
+function where(zone: LiveZone | undefined): string {
+  if (!zone?.floor) return "";
+  return zone.room && zone.room !== zone.name ? `${zone.floor} · ${zone.room}` : zone.floor;
+}
+
+function ZonePanel({ zoneId, range, place }: { zoneId: string; range: string; place: LiveZone | undefined }) {
   const { data } = useQuery({
     queryKey: ["energy-zone", zoneId, range],
     queryFn: () => getJson<ZoneDetail>(`/api/energy/zones/${zoneId}?range=${range}`),
   });
   if (!data) return null;
   return (
-    <section className="panel task zone-panel">
-      <h2>{data.name}</h2>
-      <p className="sub">
-        {data.overnight_min_w === null
-          ? "Not enough overnight data yet"
-          : `Always-on load: ${formatWatts(data.overnight_min_w)} overnight`}
-      </p>
-      {data.flags.map((flag) => (
-        <p key={flag.kind} className="warn">
-          {flag.summary}
+    <section className="card zone-panel">
+      <div
+        className="photo"
+        data-testid="zone-photo"
+        style={place ? { backgroundPosition: `${place.pin_x}% ${place.pin_y}%` } : undefined}
+      />
+      <div className="body">
+        <div className="eyebrow" data-testid="zone-where">
+          {where(place)}
+        </div>
+        <h2>{data.name}</h2>
+        <p className="sub">
+          {data.overnight_min_w === null
+            ? "Not enough overnight data yet"
+            : `Always-on load: ${formatWatts(data.overnight_min_w)} overnight`}
         </p>
-      ))}
-      <div className="chart">
-        <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={data.series}>
-            <CartesianGrid stroke="#354331" vertical={false} />
-            <XAxis
-              dataKey="time"
-              tick={{ fill: "#9fac93", fontSize: 10 }}
-              tickFormatter={(t: string) =>
-                new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-              }
-              minTickGap={40}
-            />
-            <YAxis tick={{ fill: "#9fac93", fontSize: 10 }} width={44} unit=" W" />
-            <Tooltip
-              contentStyle={{ background: "#192119", border: "1px solid #354331" }}
-              labelFormatter={(t) => new Date(String(t)).toLocaleString("en-US")}
-            />
-            {/* Gaps stay gaps: a line across missing readings would invent data. */}
-            <Line dataKey="watts" stroke="#d79971" dot={false} connectNulls={false} isAnimationActive={false} />
-          </LineChart>
-        </ResponsiveContainer>
+        {data.flags.map((flag) => (
+          <p key={flag.kind} className="warn box">
+            {flag.summary}
+          </p>
+        ))}
+        <div className="chart">
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={data.series}>
+              <CartesianGrid stroke="#233026" vertical={false} />
+              <XAxis
+                dataKey="time"
+                tick={{ fill: "#8f988f", fontSize: 10, fontFamily: "JetBrains Mono, monospace" }}
+                tickFormatter={(t: string) =>
+                  new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                }
+                minTickGap={40}
+              />
+              <YAxis tick={{ fill: "#8f988f", fontSize: 10, fontFamily: "JetBrains Mono, monospace" }} width={52} unit=" W" />
+              <Tooltip
+                contentStyle={{ background: "#121a14", border: "1px solid #233026" }}
+                labelFormatter={(t) => new Date(String(t)).toLocaleString("en-US")}
+              />
+              {/* Gaps stay gaps: a line across missing readings would invent data. */}
+              <Line dataKey="watts" stroke="#f2b45a" dot={false} connectNulls={false} isAnimationActive={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </section>
   );
@@ -102,7 +132,6 @@ function ZonePanel({ zoneId, range }: { zoneId: string; range: string }) {
 export function EnergyView() {
   const [params, setParams] = useSearchParams();
   const range = params.get("range") ?? "bill";
-  const zone = params.get("zone");
 
   const change = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -114,24 +143,34 @@ export function EnergyView() {
     queryKey: ["energy-ranking", range],
     queryFn: () => getJson<Ranking>(`/api/energy/ranking?range=${range}`),
   });
+  const live = useQuery({
+    queryKey: ["live"],
+    queryFn: () => getJson<Live>("/api/live"),
+    refetchInterval: 5000,
+  });
+  // No zone picked: show the biggest one (the ranking comes biggest first), without touching the URL.
+  const zone = params.get("zone") ?? (data?.zones[0] ? String(data.zones[0].id) : null);
+  const placeOf = (id: number) => live.data?.zones.find((z) => z.id === id);
+  const [costWhole, costCents] = (data?.whole_house.est_cost ?? 0).toFixed(2).split(".");
+  const label = RANGES.find((r) => r.value === range)?.label ?? "";
 
   return (
     <main className="page">
       <header className="top">
         <h1>Energy</h1>
+        <div className="seg">
+          {RANGES.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={range === option.value}
+              onClick={() => change("range", option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </header>
-      <div className="task-actions range">
-        {RANGES.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={range === option.value}
-            onClick={() => change("range", option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
       {isError ? (
         <p className="warn" role="alert">
           Can't reach the house server
@@ -139,41 +178,68 @@ export function EnergyView() {
       ) : null}
       {data ? (
         <>
-          <p className="big">{kwh(data.whole_house.kwh)}</p>
-          <p className="sub">{dollars(data.whole_house.est_cost)} estimated, before fixed monthly charges</p>
+          <div className="stats">
+            <div className="card">
+              <div className="eyebrow">Used · {label}</div>
+              <div className="big">{kwh(data.whole_house.kwh)}</div>
+            </div>
+            <div className="card">
+              <div className="eyebrow">Estimated cost</div>
+              <div className="big">
+                ${costWhole}
+                <small>.{costCents}</small>
+              </div>
+              <p className="sub">before fixed monthly charges</p>
+            </div>
+            <div className="card">
+              <div className="eyebrow">Recorded</div>
+              <div className="big">
+                {Math.round(data.whole_house.coverage * 100)}
+                <small>%</small>
+              </div>
+              <p className="sub">of this period has readings</p>
+            </div>
+          </div>
           {data.whole_house.coverage < COVERAGE_WARN ? (
-            <p className="warn" role="status">
+            <p className="warn box" role="status">
               Only {Math.round(data.whole_house.coverage * 100)}% of this period was recorded, so real
               usage is higher than this.
             </p>
           ) : null}
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Zone</th>
-                  <th>Energy</th>
-                  <th>Estimated cost</th>
-                  <th>Share</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.zones.map((row) => (
-                  <Row
-                    key={row.id}
-                    name={row.name}
-                    line={row}
-                    onOpen={() => change("zone", String(row.id))}
-                  />
-                ))}
-                <Row name="Car charger (estimate)" line={data.charger_estimate} />
-                <Row name="Not on any zone" line={data.unmetered} />
-              </tbody>
-            </table>
+          <div className="split">
+            <div className="card">
+              <div className="eyebrow">Where the power goes</div>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Zone</th>
+                      <th className="n">Energy</th>
+                      <th className="n">Estimated cost</th>
+                      <th>Share</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.zones.map((row) => (
+                      <Row
+                        key={row.id}
+                        name={row.name}
+                        line={row}
+                        selected={String(row.id) === zone}
+                        flagged={placeOf(row.id)?.flagged ?? false}
+                        onOpen={() => change("zone", String(row.id))}
+                      />
+                    ))}
+                    <Row name="Car charger (estimate)" line={data.charger_estimate} quiet />
+                    <Row name="Not on any zone" line={data.unmetered} quiet />
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {zone ? <ZonePanel zoneId={zone} range={range} place={placeOf(Number(zone))} /> : null}
           </div>
         </>
       ) : null}
-      {zone ? <ZonePanel zoneId={zone} range={range} /> : null}
     </main>
   );
 }
