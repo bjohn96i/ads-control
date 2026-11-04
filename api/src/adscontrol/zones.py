@@ -16,12 +16,14 @@ class Zone:
     pin_x: float
     pin_y: float
     seasonal: bool
+    room: str | None = None
+    floor: str | None = None
 
 
 async def list_zones(session: AsyncSession) -> list[Zone]:
     rows = await session.execute(
         text(
-            "SELECT id, name, channels, multiplier, kind, pin_x, pin_y, seasonal FROM zones ORDER BY id"
+            "SELECT id, name, channels, multiplier, kind, pin_x, pin_y, seasonal, room, floor FROM zones ORDER BY id"
         )
     )
     return [Zone(**row._mapping) for row in rows]

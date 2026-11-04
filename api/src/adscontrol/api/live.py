@@ -99,6 +99,8 @@ async def live(request: Request) -> dict:
                 "watts": watts[z.id],
                 "pin_x": z.pin_x,
                 "pin_y": z.pin_y,
+                "room": z.room,
+                "floor": z.floor,
                 "flagged": bool(flags.get(z.id)),
             }
             for z in circuits

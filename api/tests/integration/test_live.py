@@ -133,3 +133,9 @@ async def test_too_few_recent_readings_is_not_the_charger(session, migrated_db):
 async def test_stale_data_has_no_charger_estimate(session, migrated_db):
     await _charging(session, [60, 50, 40], 7200.0)
     assert (await _get(migrated_db))["charger_estimate_w"] is None
+
+
+async def test_zones_carry_room_and_floor(session, migrated_db):
+    await _sample(session, FULL)
+    dryer = next(z for z in (await _get(migrated_db))["zones"] if z["name"] == "Dryer")
+    assert (dryer["room"], dryer["floor"]) == ("Laundry", "Basement")

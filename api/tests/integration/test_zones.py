@@ -69,3 +69,21 @@ def test_multiplier_applies():
 
 def test_zone_power_none_when_channel_missing():
     assert zone_power(_zone(channels=[5, 11]), {5: 100.0}) is None
+
+
+async def test_kitchen_circuits_share_a_room(session):
+    kitchen = [
+        z
+        for z in await list_zones(session)
+        if z.name in {"Fridge/Stove", "Dishwasher", "Microwave/Sink Light"}
+    ]
+    assert len(kitchen) == 3
+    assert {(z.room, z.floor, z.pin_x, z.pin_y) for z in kitchen} == {
+        ("Kitchen", "1st floor", 33, 35)
+    }
+
+
+async def test_bedrooms_are_not_swapped(session):
+    pins = {z.name: z.pin_x for z in await list_zones(session)}
+    assert pins["Primary Bedroom"] == 37
+    assert pins["Guest Bedroom (Upstairs)"] == 66
