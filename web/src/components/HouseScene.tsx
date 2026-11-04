@@ -1,38 +1,67 @@
 import { Link } from "react-router-dom";
-import type { LiveZone } from "../api/client";
+import type { Live, LiveZone } from "../api/client";
 import { formatWatts } from "./format";
+
+export type Room = { name: string; watts: number | null; flagged: boolean; pin_x: number; pin_y: number; zoneId: number };
+
+// Whole House and the charger aren't circuits, so their places on the render live here.
+const WHOLE_HOUSE_PIN = { x: 65, y: 79 };
+const CHARGER_PIN = { x: 79, y: 62 };
+
+/** One label per room: circuits in the same room add up; one stopped circuit makes the room unknown. */
+export function groupRooms(zones: LiveZone[]): Room[] {
+  const rooms = new Map<string, LiveZone[]>();
+  for (const zone of zones) {
+    const key = zone.room ?? zone.name;
+    rooms.set(key, [...(rooms.get(key) ?? []), zone]);
+  }
+  return [...rooms].map(([name, members]) => {
+    const biggest = members.reduce((a, b) => ((b.watts ?? -1) > (a.watts ?? -1) ? b : a));
+    return {
+      name,
+      watts: members.some((z) => z.watts === null) ? null : members.reduce((sum, z) => sum + z.watts!, 0),
+      flagged: members.some((z) => z.flagged),
+      pin_x: members[0].pin_x,
+      pin_y: members[0].pin_y,
+      zoneId: biggest.id,
+    };
+  });
+}
 
 function chargerText(watts: number | null): string {
   if (watts === null) return "—";
   return watts > 0 ? formatWatts(watts) : "Not charging";
 }
 
-export function HouseScene({
-  zones,
-  chargerWatts,
-}: {
-  zones: LiveZone[];
-  chargerWatts: number | null;
-}) {
+function Label({ name, value, x, y, to, flagged = false }: { name: string; value: string; x: number; y: number; to: string; flagged?: boolean }) {
   return (
-    <div className="panel scene">
-      <img src="/house.svg" alt="Drawing of the house: two floors and a basement" />
-      {zones.map((zone) => (
-        <Link
-          key={zone.id}
-          className={zone.flagged ? "pin flagged" : "pin"}
-          style={{ left: `${zone.pin_x}%`, top: `${zone.pin_y}%` }}
-          to={`/energy?zone=${zone.id}`}
-        >
-          <span className="pin-name">{zone.name}</span>
-          <b>{formatWatts(zone.watts)}</b>
-          {zone.flagged ? <span className="pin-flag">Unusual</span> : null}
-        </Link>
-      ))}
-      <Link className="pin" style={{ left: "88%", top: "66%" }} to="/energy">
-        <span className="pin-name">Car charger (estimate)</span>
-        <b>{chargerText(chargerWatts)}</b>
+    <Link className={flagged ? "pin flag" : "pin"} style={{ left: `${x}%`, top: `${y}%` }} to={to}>
+      <b>{name}</b>
+      <span>{value}</span>
+      {flagged ? <em>Unusual</em> : null}
+    </Link>
+  );
+}
+
+export function HouseScene({ live }: { live: Live }) {
+  return (
+    <div className="scene">
+      <Link className="picture" to="/energy" aria-label="Open Energy">
+        <img src="/house.jpg" alt="Cutaway picture of the house: two floors and a basement" />
       </Link>
+      {groupRooms(live.zones).map((room) => (
+        <Label
+          key={room.name}
+          name={room.name}
+          value={formatWatts(room.watts)}
+          x={room.pin_x}
+          y={room.pin_y}
+          to={`/energy?zone=${room.zoneId}`}
+          flagged={room.flagged}
+        />
+      ))}
+      <Label name="Whole House" value={formatWatts(live.whole_house_w)} x={WHOLE_HOUSE_PIN.x} y={WHOLE_HOUSE_PIN.y} to="/energy" />
+      <Label name="Car charger (estimate)" value={chargerText(live.charger_estimate_w)} x={CHARGER_PIN.x} y={CHARGER_PIN.y} to="/energy" />
     </div>
   );
 }

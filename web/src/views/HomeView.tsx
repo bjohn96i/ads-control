@@ -34,7 +34,7 @@ export function HomeView() {
       {data ? (
         <div className="overview">
           <div className="main">
-            <HouseScene zones={data.zones} chargerWatts={data.charger_estimate_w} />
+            <HouseScene live={data} />
             {traffic.data ? (
               <TrafficCams
                 className="traffic-row"
