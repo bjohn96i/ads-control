@@ -1,7 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
 import { NavLink, Outlet } from "react-router-dom";
-import { getJson, type Live } from "../api/client";
-import { PERIOD_LABEL } from "./format";
 
 const PAGES = [
   { to: "/", label: "Home" },
@@ -13,11 +10,6 @@ const PAGES = [
 ];
 
 export function Layout() {
-  const { data } = useQuery({
-    queryKey: ["live"],
-    queryFn: () => getJson<Live>("/api/live"),
-    refetchInterval: 5000,
-  });
   return (
     <div className="app">
       <aside className="sidebar">
@@ -31,12 +23,6 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
-        {data ? (
-          <div className="foot">
-            {data.outdoor_f !== null ? <div>{Math.round(data.outdoor_f)}°F outside</div> : null}
-            <div>{PERIOD_LABEL[data.rate_period]}</div>
-          </div>
-        ) : null}
       </aside>
       <Outlet />
     </div>

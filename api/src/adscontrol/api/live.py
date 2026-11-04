@@ -40,7 +40,7 @@ _RECENT = text(
 
 
 _OUTDOOR = text(
-    "SELECT time, temp_c FROM outdoor_readings WHERE time <= :now ORDER BY time DESC LIMIT 1"
+    "SELECT time, temp_c, weather_code, is_day FROM outdoor_readings WHERE time <= :now ORDER BY time DESC LIMIT 1"
 )
 
 # Each sample's incoming channels summed first, then averaged per minute.
@@ -158,6 +158,8 @@ async def live(request: Request) -> dict:
         "month_kwh": month_whole.kwh if month_whole else 0.0,
         "month_coverage": month_whole.coverage if month_whole else 0.0,
         "outdoor_f": outdoor.temp_c * 9 / 5 + 32 if fresh_outdoor else None,
+        "outdoor_code": outdoor.weather_code if fresh_outdoor else None,
+        "outdoor_is_day": outdoor.is_day if fresh_outdoor else None,
         "today_kwh": today_whole.kwh if today_whole else 0.0,
         "today_cost": today_whole.est_cost if today_whole else 0.0,
         "today_coverage": today_whole.coverage if today_whole else 0.0,

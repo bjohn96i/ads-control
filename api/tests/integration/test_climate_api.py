@@ -272,7 +272,9 @@ async def test_weather_poll_stores_and_sends_only_rounded_location(session, migr
     engine = create_async_engine(migrated_db)
     with respx.mock as router:
         route = router.get(url__startswith="https://api.open-meteo.com/").mock(
-            return_value=httpx.Response(200, json={"current": {"temperature_2m": 12.5}})
+            return_value=httpx.Response(
+                200, json={"current": {"temperature_2m": 12.5, "weather_code": 61, "is_day": 0}}
+            )
         )
         await WeatherRecorder(
             33.749, -84.388, async_sessionmaker(engine), clock=lambda: OCT
@@ -281,3 +283,6 @@ async def test_weather_poll_stores_and_sends_only_rounded_location(session, migr
     assert route.calls[0].request.url.params["latitude"] == "33.75"
     assert route.calls[0].request.url.params["longitude"] == "-84.3"
     assert await session.scalar(text("SELECT temp_c FROM outdoor_readings")) == 12.5
+    assert route.calls[0].request.url.params["current"] == "temperature_2m,weather_code,is_day"
+    row = (await session.execute(text("SELECT weather_code, is_day FROM outdoor_readings"))).one()
+    assert (row.weather_code, row.is_day) == (61, False)

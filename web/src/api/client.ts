@@ -23,6 +23,8 @@ export type Live = {
   month_kwh: number;
   month_coverage: number;
   outdoor_f: number | null;
+  outdoor_code: number | null;
+  outdoor_is_day: boolean | null;
   today_kwh: number;
   today_cost: number;
   today_coverage: number;

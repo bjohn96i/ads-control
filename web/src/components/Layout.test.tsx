@@ -29,15 +29,10 @@ describe("Layout", () => {
     expect(screen.getByText("page")).toBeInTheDocument();
   });
 
-  it("shows outside temperature and rate", async () => {
+  it("the weather is on the house picture, not the sidebar", async () => {
     show("/", { rate_period: "on_peak", outdoor_f: 68.4 });
-    expect(await screen.findByText("68°F outside")).toBeInTheDocument();
-    expect(screen.getByText("On-peak")).toBeInTheDocument();
-  });
-
-  it("leaves out a missing outside temperature", async () => {
-    show("/", { rate_period: "on_peak", outdoor_f: null });
-    await screen.findByText("On-peak");
-    expect(screen.queryByText(/outside/)).not.toBeInTheDocument();
+    await screen.findByText("page");
+    await new Promise((resolve) => setTimeout(resolve, 50)); // let any live fetch land
+    expect(screen.queryByText(/°F/)).not.toBeInTheDocument();
   });
 });

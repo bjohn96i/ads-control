@@ -1,4 +1,4 @@
-"""Outdoor temperature from Open-Meteo. Only a city-level location ever leaves the house."""
+"""Outdoor temperature and conditions from Open-Meteo. Only a city-level location ever leaves the house."""
 
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -7,7 +7,7 @@ import httpx
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-WEATHER_INTERVAL_S = 3600
+WEATHER_INTERVAL_S = 900
 _URL = "https://api.open-meteo.com/v1/forecast"
 
 
@@ -23,7 +23,7 @@ class WeatherRecorder:
         self._params = {
             "latitude": round(lat, 2),
             "longitude": round(lon, 2),
-            "current": "temperature_2m",
+            "current": "temperature_2m,weather_code,is_day",
         }
         self._sessions = sessions
         self._clock = clock
@@ -32,10 +32,17 @@ class WeatherRecorder:
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.get(_URL, params=self._params)
         response.raise_for_status()
-        temp_c = response.json()["current"]["temperature_2m"]
+        current = response.json()["current"]
         async with self._sessions() as session:
             await session.execute(
-                text("INSERT INTO outdoor_readings VALUES (:t, :c) ON CONFLICT (time) DO NOTHING"),
-                {"t": self._clock(), "c": temp_c},
+                text(
+                    "INSERT INTO outdoor_readings VALUES (:t, :c, :w, :d) ON CONFLICT (time) DO NOTHING"
+                ),
+                {
+                    "t": self._clock(),
+                    "c": current["temperature_2m"],
+                    "w": current.get("weather_code"),
+                    "d": None if current.get("is_day") is None else bool(current["is_day"]),
+                },
             )
             await session.commit()

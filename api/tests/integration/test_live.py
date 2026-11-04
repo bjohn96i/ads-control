@@ -141,9 +141,14 @@ async def test_zones_carry_room_and_floor(session, migrated_db):
     assert (dryer["room"], dryer["floor"]) == ("Laundry", "Basement")
 
 
-async def _outdoor(session, temp_c: float, at: datetime):
+async def _outdoor(
+    session, temp_c: float, at: datetime, code: int | None = None, day: bool | None = None
+):
     await session.execute(text("TRUNCATE outdoor_readings"))
-    await session.execute(text("INSERT INTO outdoor_readings VALUES (:t, :c)"), {"t": at, "c": temp_c})
+    await session.execute(
+        text("INSERT INTO outdoor_readings VALUES (:t, :c, :w, :d)"),
+        {"t": at, "c": temp_c, "w": code, "d": day},
+    )
     await session.commit()
 
 
@@ -153,8 +158,17 @@ async def test_outdoor_temperature_in_fahrenheit(session, migrated_db):
 
 
 async def test_old_outdoor_temperature_is_left_out(session, migrated_db):
-    await _outdoor(session, 20.0, NOW - timedelta(hours=4))
-    assert (await _get(migrated_db))["outdoor_f"] is None
+    await _outdoor(session, 20.0, NOW - timedelta(hours=4), 61, True)
+    body = await _get(migrated_db)
+    assert body["outdoor_f"] is None
+    assert body["outdoor_code"] is None
+    assert body["outdoor_is_day"] is None
+
+
+async def test_current_weather_comes_with_the_temperature(session, migrated_db):
+    await _outdoor(session, 20.0, NOW - timedelta(hours=1), 3, False)
+    body = await _get(migrated_db)
+    assert (body["outdoor_code"], body["outdoor_is_day"]) == (3, False)
 
 
 async def test_today_energy_counts_from_local_midnight(session, migrated_db):

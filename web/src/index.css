@@ -31,7 +31,6 @@ p { margin: 4px 0; }
 .nav a { padding: 9px 12px; border-radius: 6px; color: var(--muted); font-weight: 500; text-decoration: none; }
 .nav a:hover { color: var(--text); }
 .nav a[aria-current="page"] { color: var(--text); background: var(--panel); box-shadow: inset 2px 0 0 var(--amber); }
-.sidebar .foot { margin-top: auto; font: 11px/1.7 var(--mono); color: var(--muted); }
 .page { padding: 24px 32px 28px; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; min-height: 36px; }
 .top .meta, .meta { font: 12px var(--mono); color: var(--muted); }
@@ -119,10 +118,19 @@ tr.sel .share i { background: var(--amber); opacity: 1; }
   aspect-ratio: 1586 / 992;
   border-radius: 12px;
   overflow: hidden;
+}
+/* Only the picture fades at its edges, so the weather in the corner stays readable. */
+.scene > a.picture {
   -webkit-mask-image: radial-gradient(ellipse 78% 82% at 50% 50%, #000 70%, transparent 100%);
   mask-image: radial-gradient(ellipse 78% 82% at 50% 50%, #000 70%, transparent 100%);
 }
 .scene > a.picture, .scene img { display: block; width: 100%; height: 100%; }
+.weather { position: absolute; top: 4%; left: 3%; display: flex; gap: 12px; align-items: center; color: var(--text); pointer-events: none; }
+.weather svg { width: 40px; height: 40px; flex: none; }
+.weather svg .solid { fill: var(--bg); }
+.weather b { display: block; font: 500 26px/1.1 var(--mono); }
+.weather span { font: 11px/1.6 var(--mono); color: var(--dim); letter-spacing: 0.06em; text-transform: uppercase; }
+.weather span + span::before { content: " · "; }
 .pin {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -236,7 +244,6 @@ a.traffic-cam:hover { border-color: var(--line-hover); }
   .app { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 16px; padding: 14px 16px; border-right: 0; border-bottom: 1px solid var(--line); }
   .nav { flex-direction: row; flex-wrap: wrap; }
-  .sidebar .foot { margin: 0 0 0 auto; }
   .page { padding: 20px 16px; }
   .stage, .split, .stats { grid-template-columns: minmax(0, 1fr); }
   .scene { width: 100%; order: -1; }

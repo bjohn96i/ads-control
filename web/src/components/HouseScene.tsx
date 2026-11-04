@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { Live, LiveZone } from "../api/client";
 import { formatWatts } from "./format";
+import { Weather } from "./Weather";
 
 export type Room = { name: string; watts: number | null; flagged: boolean; pin_x: number; pin_y: number; zoneId: number; circuits: number };
 
@@ -49,6 +50,7 @@ export function HouseScene({ live }: { live: Live }) {
       <Link className="picture" to="/energy" aria-label="Open Energy">
         <img src="/house.jpg" alt="Cutaway picture of the house: two floors and a basement" />
       </Link>
+      <Weather live={live} />
       {groupRooms(live.zones).map((room) => (
         <Label
           key={room.name}
