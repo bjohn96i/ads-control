@@ -5,15 +5,16 @@ import { getJson, type Live, type LiveZone } from "../api/client";
 import { formatKwh, formatWatts } from "../components/format";
 
 type EnergyLine = { kwh: number; est_cost: number; share: number; coverage: number };
+type RankedZone = EnergyLine & { id: number; name: string; room: string | null };
 type Ranking = {
-  zones: (EnergyLine & { id: number; name: string })[];
+  zones: RankedZone[];
   charger_estimate: EnergyLine;
   unmetered: EnergyLine;
-  whole_house: EnergyLine;
+  whole_house: EnergyLine & { id: number };
 };
 type ZoneFlag = { kind: string; opened_at: string; summary: string };
 type ZoneDetail = {
-  id: number;
+  id: number | null;
   name: string;
   series: { time: string; watts: number | null }[];
   overnight_min_w: number | null;
@@ -37,6 +38,7 @@ function Row({
   selected = false,
   flagged = false,
   quiet = false,
+  sub = false,
 }: {
   name: string;
   line: EnergyLine;
@@ -44,9 +46,11 @@ function Row({
   selected?: boolean;
   flagged?: boolean;
   quiet?: boolean;
+  sub?: boolean;
 }) {
+  const classes = [selected ? "sel" : quiet ? "quiet" : "", sub ? "sub" : ""].join(" ").trim();
   return (
-    <tr className={selected ? "sel" : quiet ? "quiet" : undefined}>
+    <tr className={classes || undefined}>
       <td>
         {onOpen ? (
           <button type="button" className="link" onClick={onOpen}>
@@ -74,22 +78,47 @@ function where(zone: LiveZone | undefined): string {
   return zone.room && zone.room !== zone.name ? `${zone.floor} · ${zone.room}` : zone.floor;
 }
 
-function ZonePanel({ zoneId, range, place }: { zoneId: string; range: string; place: LiveZone | undefined }) {
+/** Circuits in the same room, biggest room first; a room's numbers are its circuits added up. */
+function byRoom(zones: RankedZone[]) {
+  const rooms = new Map<string, RankedZone[]>();
+  for (const zone of zones) {
+    const key = zone.room ?? zone.name;
+    rooms.set(key, [...(rooms.get(key) ?? []), zone]);
+  }
+  const total = (members: RankedZone[], key: "kwh" | "est_cost" | "share") => members.reduce((sum, z) => sum + z[key], 0);
+  return [...rooms]
+    .map(([name, members]) => ({
+      name,
+      members,
+      line: {
+        kwh: total(members, "kwh"),
+        est_cost: total(members, "est_cost"),
+        share: total(members, "share"),
+        coverage: Math.min(...members.map((z) => z.coverage)),
+      },
+    }))
+    .sort((a, b) => b.line.kwh - a.line.kwh);
+}
+
+/** The picture is cropped to the place's label, or shown whole for the whole house. */
+function ZonePanel({ path, range, place, eyebrow }: { path: string; range: string; place: LiveZone | "whole" | undefined; eyebrow: string }) {
   const { data } = useQuery({
-    queryKey: ["energy-zone", zoneId, range],
-    queryFn: () => getJson<ZoneDetail>(`/api/energy/zones/${zoneId}?range=${range}`),
+    queryKey: ["energy-detail", path, range],
+    queryFn: () => getJson<ZoneDetail>(`${path}?range=${range}`),
   });
   if (!data) return null;
   return (
     <section className="card zone-panel">
-      <div className="photo" data-testid="zone-photo">
-        {place ? (
+      <div className={place === "whole" ? "photo whole" : "photo"} data-testid="zone-photo">
+        {place === "whole" ? (
+          <img src="/house.jpg" alt="" />
+        ) : place ? (
           <img src="/house.jpg" alt="" style={{ transform: `translate(-${place.pin_x}%, -${place.pin_y}%)` }} />
         ) : null}
       </div>
       <div className="body">
         <div className="eyebrow" data-testid="zone-where">
-          {where(place)}
+          {eyebrow}
         </div>
         <h2>{data.name}</h2>
         <p className="sub">
@@ -97,8 +126,8 @@ function ZonePanel({ zoneId, range, place }: { zoneId: string; range: string; pl
             ? "Not enough overnight data yet"
             : `Always-on load: ${formatWatts(data.overnight_min_w)} overnight`}
         </p>
-        {data.flags.map((flag) => (
-          <p key={flag.kind} className="warn box">
+        {data.flags.map((flag, i) => (
+          <p key={i} className="warn box">
             {flag.summary}
           </p>
         ))}
@@ -135,6 +164,8 @@ export function EnergyView() {
 
   const change = (key: string, value: string) => {
     const next = new URLSearchParams(params);
+    // A room and a zone are two ways to pick what the panel shows; only one stands.
+    if (key === "zone" || key === "room") ["zone", "room"].forEach((k) => next.delete(k));
     next.set(key, value);
     setParams(next);
   };
@@ -148,9 +179,12 @@ export function EnergyView() {
     queryFn: () => getJson<Live>("/api/live"),
     refetchInterval: 5000,
   });
-  // No zone picked: show the biggest one (the ranking comes biggest first), without touching the URL.
-  const zone = params.get("zone") ?? (data?.zones[0] ? String(data.zones[0].id) : null);
+  const room = params.get("room");
+  // Nothing picked: show the whole house, without touching the URL.
+  const zone = room ? null : (params.get("zone") ?? (data ? String(data.whole_house.id) : null));
+  const whole = data !== undefined && zone === String(data.whole_house.id);
   const placeOf = (id: number) => live.data?.zones.find((z) => z.id === id);
+  const roomPlace = live.data?.zones.find((z) => z.room === room);
   const [costWhole, costCents] = (data?.whole_house.est_cost ?? 0).toFixed(2).split(".");
   const label = RANGES.find((r) => r.value === range)?.label ?? "";
 
@@ -220,23 +254,58 @@ export function EnergyView() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.zones.map((row) => (
-                      <Row
-                        key={row.id}
-                        name={row.name}
-                        line={row}
-                        selected={String(row.id) === zone}
-                        flagged={placeOf(row.id)?.flagged ?? false}
-                        onOpen={() => change("zone", String(row.id))}
-                      />
-                    ))}
+                    {byRoom(data.zones).map((group) => {
+                      const circuit = (row: RankedZone, sub: boolean) => (
+                        <Row
+                          key={row.id}
+                          name={row.name}
+                          line={row}
+                          sub={sub}
+                          selected={String(row.id) === zone}
+                          flagged={placeOf(row.id)?.flagged ?? false}
+                          onOpen={() => change("zone", String(row.id))}
+                        />
+                      );
+                      if (group.members.length === 1) return circuit(group.members[0], false);
+                      return [
+                        <Row
+                          key={`room-${group.name}`}
+                          name={group.name}
+                          line={group.line}
+                          selected={group.name === room}
+                          flagged={group.members.some((z) => placeOf(z.id)?.flagged)}
+                          onOpen={() => change("room", group.name)}
+                        />,
+                        ...group.members.map((row) => circuit(row, true)),
+                      ];
+                    })}
                     <Row name="Car charger (estimate)" line={data.charger_estimate} quiet />
                     <Row name="Not on any zone" line={data.unmetered} quiet />
+                    <Row
+                      name="Whole House"
+                      line={data.whole_house}
+                      selected={whole}
+                      onOpen={() => change("zone", String(data.whole_house.id))}
+                    />
                   </tbody>
                 </table>
               </div>
             </div>
-            {zone ? <ZonePanel zoneId={zone} range={range} place={placeOf(Number(zone))} /> : null}
+            {room ? (
+              <ZonePanel
+                path={`/api/energy/rooms/${encodeURIComponent(room)}`}
+                range={range}
+                place={roomPlace}
+                eyebrow={roomPlace?.floor ?? ""}
+              />
+            ) : zone ? (
+              <ZonePanel
+                path={`/api/energy/zones/${zone}`}
+                range={range}
+                place={whole ? "whole" : placeOf(Number(zone))}
+                eyebrow={whole ? "All floors" : where(placeOf(Number(zone)))}
+              />
+            ) : null}
           </div>
         </>
       ) : null}

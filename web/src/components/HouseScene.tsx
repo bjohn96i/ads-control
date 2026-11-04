@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import type { Live, LiveZone } from "../api/client";
 import { formatWatts } from "./format";
 
-export type Room = { name: string; watts: number | null; flagged: boolean; pin_x: number; pin_y: number; zoneId: number };
+export type Room = { name: string; watts: number | null; flagged: boolean; pin_x: number; pin_y: number; zoneId: number; circuits: number };
 
 // The charger has no zone of its own, so its place on the render lives here.
 const CHARGER_PIN = { x: 82, y: 50 };
@@ -23,6 +23,7 @@ export function groupRooms(zones: LiveZone[]): Room[] {
       pin_x: members[0].pin_x,
       pin_y: members[0].pin_y,
       zoneId: biggest.id,
+      circuits: members.length,
     };
   });
 }
@@ -55,7 +56,7 @@ export function HouseScene({ live }: { live: Live }) {
           value={formatWatts(room.watts)}
           x={room.pin_x}
           y={room.pin_y}
-          to={`/energy?zone=${room.zoneId}`}
+          to={room.circuits > 1 ? `/energy?room=${encodeURIComponent(room.name)}` : `/energy?zone=${room.zoneId}`}
           flagged={room.flagged}
         />
       ))}

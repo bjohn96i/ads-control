@@ -59,8 +59,13 @@ describe("HouseScene", () => {
     expect(label.style.top).toBe("77%");
   });
 
-  it("labels open energy for the biggest circuit", () => {
+  it("a room of several circuits opens the room", () => {
     show(KITCHEN);
-    expect(screen.getByRole("link", { name: /Kitchen/ })).toHaveAttribute("href", "/energy?zone=2");
+    expect(screen.getByRole("link", { name: /Kitchen/ })).toHaveAttribute("href", "/energy?room=Kitchen");
+  });
+
+  it("a one-circuit room opens its circuit", () => {
+    show([zone({ id: 12, name: "Water Heater", room: "Water Heater" })]);
+    expect(screen.getByRole("link", { name: /Water Heater/ })).toHaveAttribute("href", "/energy?zone=12");
   });
 });

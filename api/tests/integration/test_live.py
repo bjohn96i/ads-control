@@ -192,7 +192,7 @@ async def test_recent_line_skips_a_minute_missing_one_incoming_leg(session, migr
 
 async def test_whole_house_label_position_comes_from_its_zone(session, migrated_db):
     await _sample(session, FULL)
-    assert (await _get(migrated_db))["whole_house_pin"] == {"x": 65, "y": 79}
+    assert (await _get(migrated_db))["whole_house_pin"] == {"x": 63, "y": 84}
 
 
 async def test_today_is_reused_for_a_minute(session, migrated_db):

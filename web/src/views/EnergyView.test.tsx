@@ -15,12 +15,13 @@ const RANKING = {
   start: "2026-10-01T00:00:00Z",
   end: "2026-10-31T00:00:00Z",
   zones: [
-    { id: 3, name: "Dishwasher", ...line(120.4, 21.5, 0.2) },
-    { id: 6, name: "Basement", ...line(90, 12.25, 0.15) },
+    { id: 3, name: "Dishwasher", room: "Kitchen", ...line(120.4, 21.5, 0.2) },
+    { id: 6, name: "Basement", room: "John's Office", ...line(90, 12.25, 0.15) },
+    { id: 2, name: "Fridge/Stove", room: "Kitchen", ...line(30, 5, 0.05) },
   ],
   charger_estimate: line(300, 20, 0.5),
   unmetered: line(30, 4, 0.05),
-  whole_house: line(600, 90, 1),
+  whole_house: { id: 1, ...line(600, 90, 1) },
 };
 
 const ZONE = {
@@ -47,13 +48,15 @@ function Where() {
 }
 
 const zoneName = (url: string) =>
-  ({ 3: "Dishwasher", 4: "Dryer", 12: "Water Heater" })[Number(url.split("/").pop()!.split("?")[0])] ?? "Zone";
+  ({ 1: "Whole House", 3: "Dishwasher", 4: "Dryer", 12: "Water Heater" })[Number(url.split("/").pop()!.split("?")[0])] ?? "Zone";
 
 function show(ranking: unknown = RANKING, entry = "/energy") {
   const fetchMock = vi.fn(async (url: string) =>
     url === "/api/live"
       ? new Response(JSON.stringify(LIVE))
-      : url.startsWith("/api/energy/zones/")
+      : url.startsWith("/api/energy/rooms/")
+        ? new Response(JSON.stringify({ ...ZONE, id: null, name: decodeURIComponent(url.split("/").pop()!.split("?")[0]) }))
+        : url.startsWith("/api/energy/zones/")
         ? new Response(JSON.stringify({ ...ZONE, id: Number(url.split("/").pop()!.split("?")[0]), name: zoneName(url) }))
         : new Response(JSON.stringify(ranking)),
   );
@@ -76,9 +79,9 @@ describe("EnergyView", () => {
   it("lists_zones_in_order_with_kwh_and_cost", async () => {
     show();
     const rows = await screen.findAllByRole("row");
-    expect(within(rows[1]).getByText("Dishwasher")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("120 kWh")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("$21.50")).toBeInTheDocument();
+    expect(within(rows[2]).getByText("Dishwasher")).toBeInTheDocument();
+    expect(within(rows[2]).getByText("120 kWh")).toBeInTheDocument();
+    expect(within(rows[2]).getByText("$21.50")).toBeInTheDocument();
   });
 
   it("small_amounts_keep_a_decimal_rather_than_rounding_to_nothing", async () => {
@@ -144,10 +147,40 @@ describe("EnergyView", () => {
     ZONE.flags = [];
   });
 
-  it("shows_the_biggest_zone_when_none_is_picked", async () => {
-    show({ ...RANKING, zones: [{ id: 12, name: "Water Heater", ...line(200, 30, 0.4) }, ...RANKING.zones] });
-    expect(await screen.findByRole("heading", { name: "Water Heater" })).toBeInTheDocument();
+  it("shows_the_whole_house_uncropped_when_nothing_is_picked", async () => {
+    show();
+    expect(await screen.findByRole("heading", { name: "Whole House" })).toBeInTheDocument();
     expect(screen.getByTestId("where")).not.toHaveTextContent("zone=");
+    expect(screen.getByTestId("zone-photo")).toHaveClass("whole");
+    expect(screen.getByTestId("zone-photo").querySelector("img")!.style.transform).toBe("");
+  });
+
+  it("groups_circuits_under_their_room_with_the_room_total", async () => {
+    show();
+    const rows = await screen.findAllByRole("row");
+    expect(within(rows[1]).getByRole("button", { name: "Kitchen" })).toBeInTheDocument();
+    expect(within(rows[1]).getByText("150 kWh")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("$26.50")).toBeInTheDocument();
+    expect(within(rows[3]).getByText("Fridge/Stove")).toBeInTheDocument();
+    // A room with one circuit is just that circuit's row.
+    expect(screen.queryByRole("button", { name: "John's Office" })).not.toBeInTheDocument();
+  });
+
+  it("clicking_a_room_shows_the_room", async () => {
+    const fetchMock = show(RANKING, "/energy?zone=3");
+    fireEvent.click(await screen.findByRole("button", { name: "Kitchen" }));
+    expect(screen.getByTestId("where")).toHaveTextContent("room=Kitchen");
+    expect(screen.getByTestId("where")).not.toHaveTextContent("zone=");
+    expect(await screen.findByRole("heading", { name: "Kitchen" })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map((c) => c[0])).toContain("/api/energy/rooms/Kitchen?range=bill");
+    await vi.waitFor(() => expect(screen.getByTestId("zone-where")).toHaveTextContent(/^1st floor$/));
+  });
+
+  it("whole_house_row_opens_the_whole_house", async () => {
+    show(RANKING, "/energy?zone=3");
+    fireEvent.click(await screen.findByRole("button", { name: "Whole House" }));
+    expect(screen.getByTestId("where")).toHaveTextContent("zone=1");
+    expect(await screen.findByRole("heading", { name: "Whole House" })).toBeInTheDocument();
   });
 
   it("the_crop_is_centred_on_the_zones_label", async () => {

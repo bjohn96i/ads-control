@@ -178,3 +178,29 @@ async def test_series_applies_multiplier_and_sums_channels(api, session):
 
 async def test_unknown_zone_is_404(api):
     assert (await api.get("/api/energy/zones/999999?range=7d")).status_code == 404
+
+
+async def test_ranking_names_each_zones_room_and_the_whole_house_zone(api, session):
+    body = (await api.get("/api/energy/ranking?range=7d")).json()
+    assert _zone(body, "Dishwasher")["room"] == "Kitchen"
+    whole_id = await session.scalar(text("SELECT id FROM zones WHERE kind = 'incoming'"))
+    assert body["whole_house"]["id"] == whole_id
+
+
+async def test_room_series_adds_its_circuits(api, session):
+    a = NOW - timedelta(hours=2)
+    await _fill(session, a, a + timedelta(hours=1), {2: 100.0, 3: 50.0, 8: 25.0})
+    body = (await api.get("/api/energy/rooms/Kitchen?range=7d")).json()
+    assert body["name"] == "Kitchen"
+    assert 175.0 in [p["watts"] for p in body["series"]]
+
+
+async def test_room_hour_missing_a_circuit_is_a_gap_not_a_low(api, session):
+    a = NOW - timedelta(hours=2)
+    await _fill(session, a, a + timedelta(hours=1), {2: 100.0, 3: 50.0})
+    series = (await api.get("/api/energy/rooms/Kitchen?range=7d")).json()["series"]
+    assert all(p["watts"] is None for p in series)
+
+
+async def test_unknown_room_is_404(api):
+    assert (await api.get("/api/energy/rooms/Attic?range=7d")).status_code == 404
