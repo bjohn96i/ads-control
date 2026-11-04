@@ -123,6 +123,7 @@ export function CamerasView() {
     <main className="page">
       <header className="top">
         <h1>Cameras</h1>
+        {auth.data ? <span className="meta">{auth.data.unlocked ? "Unlocked" : "Locked"}</span> : null}
       </header>
       {isError ? (
         <p className="warn" role="alert">
@@ -130,19 +131,26 @@ export function CamerasView() {
         </p>
       ) : null}
       {traffic.data?.cameras.length ? (
-        <section className="cam-section">
-          <h2 className="eyebrow">Traffic nearby · Georgia 511</h2>
-          <TrafficCams className="traffic-row" cameras={traffic.data.cameras} live />
-        </section>
+        <>
+          <div className="section-head">
+            <h2>Traffic nearby · Georgia 511</h2>
+            <span>Watch any of them live</span>
+          </div>
+          <TrafficCams cameras={traffic.data.cameras} live />
+        </>
       ) : null}
-      <section className="cam-section">
-        <h2 className="eyebrow">At the house</h2>
+      <div className="section-head">
+        <h2>At the house</h2>
+        <span>Live only when you press Watch live</span>
+      </div>
+      <section className="house">
         {data?.cameras.length === 0 ? <p className="sub">No cameras found yet.</p> : null}
         {/* One PIN box for the page; once unlocked it renders nothing and the video controls appear. */}
         <PinGate>{null}</PinGate>
         <div className="house-cams">
           {data?.cameras.map((camera) => (
             <article key={camera.id} className="panel camera-card">
+              <div className="kind">{camera.kind}</div>
               <h3>{camera.name}</h3>
               <p className="sub">{eventText(camera)}</p>
               {auth.data?.unlocked ? <LiveVideo camera={camera} /> : null}
@@ -151,12 +159,14 @@ export function CamerasView() {
         </div>
       </section>
       {events.data ? (
-        <section className="cam-section">
-          <h2 className="eyebrow">Last 25 camera events</h2>
-          <div className="panel camera-events">
+        <>
+          <div className="section-head">
+            <h2>Last 25 camera events</h2>
+          </div>
+          <div className="card">
             <CameraEventTable events={events.data.events} />
           </div>
-        </section>
+        </>
       ) : null}
     </main>
   );

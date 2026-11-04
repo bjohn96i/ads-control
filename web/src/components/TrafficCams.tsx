@@ -87,14 +87,16 @@ function LiveTile({ camera, tick }: { camera: TrafficCamera; tick: number }) {
   const [state, setState] = useState<"idle" | "live" | "ended">("idle");
   const stop = useCallback((ended: boolean) => setState(ended ? "ended" : "idle"), []);
   return (
-    <figure className="panel traffic-cam">
+    <figure className="traffic-cam">
       {state === "live" ? (
         <TrafficVideo camera={camera} onStop={stop} />
       ) : (
         <img src={`${camera.image_url}?t=${tick}`} alt={`Traffic at ${camera.nickname}`} loading="lazy" />
       )}
-      <span className="label">{camera.nickname}</span>
-      <span className="sub">{camera.name}</span>
+      <figcaption>
+        {camera.nickname}
+        <span>{camera.name}</span>
+      </figcaption>
       {state === "live" ? (
         <button type="button" onClick={() => stop(false)}>
           Stop
@@ -127,16 +129,18 @@ export function TrafficCams({
         const body = (
           <>
             <img src={`${camera.image_url}?t=${tick}`} alt={`Traffic at ${camera.nickname}`} loading="lazy" />
-            <span className="label">{camera.nickname}</span>
-            <span className="sub">{camera.name}</span>
+            <figcaption>
+        {camera.nickname}
+        <span>{camera.name}</span>
+      </figcaption>
           </>
         );
         return linkTo ? (
-          <Link key={camera.view} className="panel traffic-cam" to={linkTo}>
-            {body}
+          <Link key={camera.view} className="traffic-cam" to={linkTo}>
+            <figure>{body}</figure>
           </Link>
         ) : (
-          <figure key={camera.view} className="panel traffic-cam">
+          <figure key={camera.view} className="traffic-cam">
             {body}
           </figure>
         );

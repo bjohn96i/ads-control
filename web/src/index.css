@@ -176,9 +176,13 @@ a.traffic-cam:hover { border-color: var(--line-hover); }
   background: linear-gradient(transparent, rgba(8, 11, 9, 0.85));
   display: flex; justify-content: space-between; align-items: end; gap: 6px;
 }
-.traffic-cam button { position: absolute; top: 8px; right: 8px; min-height: 0; padding: 3px 10px; font: 500 11px var(--mono); background: rgba(10, 14, 11, 0.8); }
+.traffic-cam figure { margin: 0; height: 100%; }
+.traffic-cam figcaption { white-space: nowrap; }
+.traffic-cam figcaption span { font: 10px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.traffic-cam button { position: absolute; top: 8px; left: 8px; min-height: 0; padding: 3px 10px; font: 500 11px var(--mono); background: rgba(10, 14, 11, 0.8); }
 .live { position: absolute; top: 8px; left: 8px; font: 500 10px var(--mono); letter-spacing: 0.1em; padding: 3px 8px; border-radius: 999px; background: rgba(10, 14, 11, 0.8); border: 1px solid rgba(236, 230, 218, 0.2); }
 .live::before { content: "▶ "; color: var(--amber); }
+.house { display: grid; gap: 14px; }
 .house-cams { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
 .camera-card { display: flex; flex-direction: column; justify-content: space-between; gap: 4px; padding: 12px; min-height: 150px; background: radial-gradient(circle at 50% 40%, #18231b, var(--panel)); }
 .camera-card:has(video) { grid-column: span 2; }

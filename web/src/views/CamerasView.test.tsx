@@ -81,6 +81,18 @@ async function card(name: string) {
 }
 
 describe("CamerasView", () => {
+  it("shows_the_lock_state_in_the_title_line", async () => {
+    show({ unlocked: false });
+    const top = screen.getByRole("heading", { name: "Cameras" }).closest("header")!;
+    expect(await within(top).findByText("Locked")).toBeInTheDocument();
+  });
+
+  it("shows_unlocked_in_the_title_line", async () => {
+    show({ unlocked: true });
+    const top = screen.getByRole("heading", { name: "Cameras" }).closest("header")!;
+    expect(await within(top).findByText("Unlocked")).toBeInTheDocument();
+  });
+
   it("locked_tile_prompts_for_pin", async () => {
     show({ unlocked: false });
     const backyard = await card("Backyard camera");
