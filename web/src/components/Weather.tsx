@@ -84,17 +84,17 @@ function useNow(): Date {
   return now;
 }
 
-/** The time, outside now, and the electricity rate, for the corner of the house picture. */
+/** Outside now and the electricity rate in the picture's top left; the date and time in its top right. */
 export function Weather({ live }: { live: Live }) {
   const clock = useNow();
   const now = live.outdoor_code === null ? null : weatherOf(live.outdoor_code, live.outdoor_is_day ?? true);
   return (
-    <div className="weather">
-      <div className="clock">
-        <b>{clock.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</b>
+    <>
+      <div className="weather clock">
         <span>{clock.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
+        <b>{clock.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</b>
       </div>
-      <div className="now">
+      <div className="weather now">
         {now ? <Glyph icon={now.icon} /> : null}
         <div>
           {live.outdoor_f !== null ? <b>{Math.round(live.outdoor_f)}°F</b> : null}
@@ -104,6 +104,6 @@ export function Weather({ live }: { live: Live }) {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

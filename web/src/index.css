@@ -125,10 +125,11 @@ tr.sel .share i { background: var(--amber); opacity: 1; }
   mask-image: radial-gradient(ellipse 78% 82% at 50% 50%, #000 70%, transparent 100%);
 }
 .scene > a.picture, .scene img { display: block; width: 100%; height: 100%; }
-.weather { position: absolute; top: 4%; left: 3%; display: flex; flex-direction: column; gap: 18px; color: var(--text); pointer-events: none; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6); }
+.weather { position: absolute; top: 4%; color: var(--text); pointer-events: none; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6); }
+.weather.clock { right: 3%; text-align: right; }
 .weather b { display: block; font: 500 clamp(28px, 2.6vw, 44px)/1.05 var(--mono); }
 .weather span { font: clamp(11px, 0.8vw, 14px)/1.6 var(--mono); color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase; }
-.weather .now { display: flex; gap: 14px; align-items: center; }
+.weather.now { left: 3%; display: flex; gap: 14px; align-items: center; }
 .weather svg { width: clamp(44px, 3.8vw, 68px); height: clamp(44px, 3.8vw, 68px); flex: none; }
 .weather svg .solid { fill: var(--bg); }
 .weather .sub span + span::before { content: " · "; }
