@@ -95,7 +95,8 @@ async def _sorted_tasks(request: Request) -> list[dict]:
 
 @router.get("")
 async def list_maintenance(request: Request) -> dict:
-    return {"tasks": await _sorted_tasks(request)}
+    # The "who's using this phone" names live in .env, so the code carries no one's name.
+    return {"tasks": await _sorted_tasks(request), "people": request.app.state.settings.household}
 
 
 @router.get("/next")

@@ -422,3 +422,11 @@ async def test_new_write_routes_need_the_header(api):
     ).status_code == 403
     assert (await api.patch("/api/maintenance/items/1", json={"name": "A"})).status_code == 403
     assert (await api.delete("/api/maintenance/items/1")).status_code == 403
+
+
+async def test_the_household_names_come_from_settings(session, migrated_db):
+    app = create_app(
+        Settings(database_url=migrated_db, household=["Alex", "Sam"]), jobs=[], start_jobs=False
+    )
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
+        assert (await c.get("/api/maintenance")).json()["people"] == ["Alex", "Sam"]

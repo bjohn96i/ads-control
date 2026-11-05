@@ -29,6 +29,9 @@ class Settings(BaseSettings):
         "MacBook-Air-2.local",
         "control.home.arpa",
     ]
+    household: list[
+        str
+    ] = []  # first names for "who's using this phone"; HOUSEHOLD in .env, a JSON list
     allow_insecure_pin: bool = False  # local development only; PIN and cameras then use plain HTTP
     google_client_id: str = ""
     google_client_secret: SecretStr = SecretStr("")

@@ -4,7 +4,6 @@ import { ApiError, getJson, type MaintenanceTask, send } from "../api/client";
 import { dueText, repeatText } from "../components/format";
 import { type Act, AddTask, TaskEditor } from "../components/TaskEditor";
 
-const PEOPLE = ["John", "Sam"];
 const UNDO_MS = 10_000;
 
 function loadWho(): string | null {
@@ -131,7 +130,7 @@ export function MaintenanceView() {
 
   const { data, isError } = useQuery({
     queryKey: ["maintenance"],
-    queryFn: () => getJson<{ tasks: MaintenanceTask[] }>("/api/maintenance"),
+    queryFn: () => getJson<{ tasks: MaintenanceTask[]; people: string[] }>("/api/maintenance"),
   });
 
   const refresh = () => {
@@ -208,10 +207,11 @@ export function MaintenanceView() {
         <h1>Maintenance</h1>
         <span className="meta"><a href="/api/maintenance/export">Back up the list</a></span>
       </header>
-      {who ? null : (
+      {/* The names come from HOUSEHOLD in .env; with none set there is nothing to ask. */}
+      {who || !data?.people.length ? null : (
         <div className="who">
           <span>Who's using this phone?</span>
-          {PEOPLE.map((person) => (
+          {data.people.map((person) => (
             <button key={person} type="button" onClick={() => choose(person)}>
               {person}
             </button>

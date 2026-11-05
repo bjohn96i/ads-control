@@ -43,7 +43,7 @@ function stub() {
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
-      if (method === "GET") return new Response(JSON.stringify({ tasks: TASKS }));
+      if (method === "GET") return new Response(JSON.stringify({ tasks: TASKS, people: ["Alex", "Sam"] }));
       calls.push({
         url,
         method,
@@ -136,7 +136,7 @@ describe("MaintenanceView", () => {
       "fetch",
       vi.fn(async (_u: string, init?: RequestInit) =>
         (init?.method ?? "GET") === "GET"
-          ? new Response(JSON.stringify({ tasks: TASKS }))
+          ? new Response(JSON.stringify({ tasks: TASKS, people: ["Alex", "Sam"] }))
           : new Response(JSON.stringify({ completion_ids: [] })),
       ),
     );
@@ -163,11 +163,11 @@ describe("MaintenanceView", () => {
   it("asks_who_once_then_remembers", async () => {
     localStorage.clear();
     show();
-    fireEvent.click(await screen.findByRole("button", { name: "John" }));
-    expect(localStorage.getItem("who")).toBe("John");
+    fireEvent.click(await screen.findByRole("button", { name: "Alex" }));
+    expect(localStorage.getItem("who")).toBe("Alex");
     expect(screen.queryByRole("button", { name: "Sam" })).not.toBeInTheDocument();
     fireEvent.click((await row("Fridge Filter")).getByRole("button", { name: /done today/i }));
-    await waitFor(() => expect(calls[0]?.body.who).toBe("John"));
+    await waitFor(() => expect(calls[0]?.body.who).toBe("Alex"));
   });
 
   it("works_when_localstorage_throws", async () => {
@@ -176,9 +176,9 @@ describe("MaintenanceView", () => {
     };
     vi.stubGlobal("localStorage", { getItem: blocked, setItem: blocked });
     show();
-    fireEvent.click(await screen.findByRole("button", { name: "John" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Alex" }));
     fireEvent.click((await row("Fridge Filter")).getByRole("button", { name: /done today/i }));
-    await waitFor(() => expect(calls[0]?.body.who).toBe("John"));
+    await waitFor(() => expect(calls[0]?.body.who).toBe("Alex"));
   });
 
   it("overdue_sorts_first", async () => {
@@ -349,7 +349,7 @@ describe("MaintenanceView", () => {
       "fetch",
       vi.fn(async (_u: string, init?: RequestInit) =>
         (init?.method ?? "GET") === "GET"
-          ? new Response(JSON.stringify({ tasks: TASKS }))
+          ? new Response(JSON.stringify({ tasks: TASKS, people: ["Alex", "Sam"] }))
           : new Response("{}", { status: 409 }),
       ),
     );
@@ -365,7 +365,7 @@ describe("MaintenanceView", () => {
       "fetch",
       vi.fn(async (_u: string, init?: RequestInit) =>
         (init?.method ?? "GET") === "GET"
-          ? new Response(JSON.stringify({ tasks: TASKS }))
+          ? new Response(JSON.stringify({ tasks: TASKS, people: ["Alex", "Sam"] }))
           : new Response("{}", { status: 500 }),
       ),
     );
