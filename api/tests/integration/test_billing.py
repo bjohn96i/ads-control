@@ -57,16 +57,16 @@ async def _johns_days(session) -> None:
     await session.commit()
 
 
-async def _counter_days(session, total_kwh: float = 150.0) -> None:
-    """Whole-house counter energy, even across the 66 recorded hours (channel 1; 7 stays 0)."""
+async def _counter_days(session, total_kwh: float = 150.0, hours: int = HOURS) -> None:
+    """Whole-house counter energy, even across the first `hours` of the 66 (channel 1; 7 is 0)."""
     start = datetime(2026, 11, 2, tzinfo=LOCAL)
-    for i in range(HOURS):
+    for i in range(hours):
         hour = start + timedelta(hours=i)
         await session.execute(
             text(
                 "INSERT INTO channel_energy VALUES (:h, 1, :wh, 'counter'), (:h, 7, 0, 'counter')"
             ),
-            {"h": hour, "wh": total_kwh * 1000 / HOURS},
+            {"h": hour, "wh": total_kwh * 1000 / hours},
         )
     await session.commit()
 
@@ -103,11 +103,30 @@ async def test_projection_scales_by_days_and_adds_basic_for_the_whole_period(ses
     await _counter_days(session)
     bill = await current_bill(session, NOW)
     kwh, energy_cost = _expected(sum(JOHNS_DAYS.values()), 150.0)
-    elapsed = (NOW - PERIOD_START).total_seconds() / 86400  # 11.79: Nov 1 had 25 hours
-    assert bill["projected_kwh"] == pytest.approx(kwh / elapsed * 30)
+    covered = 9 + HOURS / 24  # days with data: the nine hand-entered ones and 66 recorded hours
+    assert bill["projected_kwh"] == pytest.approx(kwh / covered * 30)
     assert bill["projected_cost"] == pytest.approx(
-        kwh / elapsed * 30 * energy_cost / kwh + 30 * BASIC_DAY
+        kwh / covered * 30 * energy_cost / kwh + 30 * BASIC_DAY
     )
+
+
+async def test_an_outage_doesnt_drag_the_projection_down(session, period):
+    """Recording stopped after 33 of the 66 hours: project from the time that has data."""
+    await _bill(session)
+    await _johns_days(session)
+    await _counter_days(session, total_kwh=75.0, hours=33)
+    bill = await current_bill(session, NOW)
+    assert bill["projected_kwh"] == pytest.approx(
+        (sum(JOHNS_DAYS.values()) + 75) / (9 + 33 / 24) * 30
+    )
+
+
+async def test_less_than_a_day_of_data_gives_no_projection(session, period):
+    await _bill(session)
+    await _counter_days(session, total_kwh=6.0, hours=6)
+    bill = await current_bill(session, NOW)
+    assert bill["kwh_so_far"] == pytest.approx(6.0)
+    assert (bill["projected_kwh"], bill["projected_cost"], bill["verdict"]) == (None, None, None)
 
 
 async def test_verdict_uses_three_percent(session, period):
@@ -140,8 +159,7 @@ async def test_no_energy_yet_returns_a_zero_projection_without_dividing_by_zero(
     await _bill(session)
     bill = await current_bill(session, NOW)
     assert bill["kwh_so_far"] == 0
-    assert bill["projected_kwh"] == 0
-    assert bill["projected_cost"] == pytest.approx(30 * BASIC_DAY)
+    assert (bill["projected_kwh"], bill["projected_cost"], bill["change_pct"]) == (None, None, None)
 
 
 async def test_no_bill_means_no_estimate(session, period):

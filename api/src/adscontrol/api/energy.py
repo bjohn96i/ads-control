@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import text
 
 from adscontrol.detect.store import open_findings
-from adscontrol.energy import charger_estimate, energy_by_zone, manual_days
+from adscontrol.energy import charger_estimate, energy_by_zone, manual_days, manual_share
 from adscontrol.rates import LOCAL, all_in_cents, list_rates, version_in_force
 
 router = APIRouter(prefix="/api/energy")
@@ -81,7 +81,7 @@ async def ranking(request: Request, range: Range = "bill") -> dict:  # noqa: A00
             "id": whole.zone_id,
             **_whole_with_manual(whole, manual, rates, start, end),
         },
-        "manual_kwh": sum(manual.values()),
+        "manual_kwh": manual_share(manual, start, end)[0],
         "manual_days": len(manual),
     }
 
@@ -91,7 +91,7 @@ def _whole_with_manual(whole, manual: dict, rates, start: datetime, end: datetim
     measured time only, so whole-house-only days don't swell "unmetered"."""
     if not manual:
         return _line(whole.kwh, whole.est_cost, whole.coverage, whole.kwh)
-    manual_kwh = sum(manual.values())
+    manual_kwh, manual_covered_days = manual_share(manual, start, end)
     if whole.kwh > 0:
         cents = whole.est_cost / whole.kwh * 100
     else:  # nothing measured yet: an even day/night mix at today's prices
@@ -99,7 +99,7 @@ def _whole_with_manual(whole, manual: dict, rates, start: datetime, end: datetim
         cents = (all_in_cents(rate, "off_peak") + all_in_cents(rate, "super_off_peak")) / 2
     expected_days = max((end - start).total_seconds() / 86400, 1)
     kwh = whole.kwh + manual_kwh
-    coverage = min(1.0, whole.coverage + len(manual) / expected_days)
+    coverage = min(1.0, whole.coverage + manual_covered_days / expected_days)
     return _line(kwh, whole.est_cost + manual_kwh * cents / 100, coverage, kwh)
 
 

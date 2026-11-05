@@ -289,3 +289,11 @@ async def test_add_day_upserts(session, no_counter_energy):
     await session.commit()
     rows = (await session.execute(text("SELECT day, kwh, source FROM manual_daily_energy"))).all()
     assert [tuple(r) for r in rows] == [(date(2026, 10, 24), 24.714, "Refoss app")]
+
+
+async def test_a_partly_covered_hand_entered_day_counts_its_share(api, session, no_counter_energy):
+    """7 days back from Oct 20 12:00 local starts Oct 13 12:00: half of Oct 13 is in range."""
+    await add_manual_day(session, date(2026, 10, 13), 20.0)
+    await session.commit()
+    body = (await api.get("/api/energy/ranking?range=7d")).json()
+    assert body["manual_kwh"] == pytest.approx(10.0)

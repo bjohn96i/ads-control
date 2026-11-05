@@ -6,7 +6,7 @@ which is exact even across recording gaps, and otherwise the 10-second power sam
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -179,3 +179,17 @@ async def manual_days(session: AsyncSession, start: date, end: date) -> dict[dat
         {"start": start, "end": end, "ch": channels or []},
     )
     return {r.day: r.kwh for r in rows}
+
+
+def manual_share(manual: dict[date, float], start: datetime, end: datetime) -> tuple[float, float]:
+    """kWh and days of hand-entered days inside [start, end), pro rata for a day cut by either end
+    (a 7-day range starting at noon holds half of its first day)."""
+    kwh = days = 0.0
+    for day, value in manual.items():
+        day_start = datetime.combine(day, time.min, tzinfo=LOCAL)
+        day_end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=LOCAL)
+        inside = (min(end, day_end) - max(start, day_start)).total_seconds()
+        fraction = max(0.0, inside) / (day_end - day_start).total_seconds()
+        kwh += value * fraction
+        days += fraction
+    return kwh, days

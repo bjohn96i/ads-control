@@ -36,13 +36,16 @@ function shortDate(isoDate: string): string {
 
 /** The words for the current bill, shared by the home card and the Bills page. */
 export function thisBillText(bill: CurrentBill) {
-  const pct = Math.round(Math.abs(bill.change_pct) * 100);
+  const pct = Math.round(Math.abs(bill.change_pct ?? 0) * 100);
+  const waiting = bill.projected_cost === null || bill.verdict === null;
   return {
-    projected: `≈ $${Math.round(bill.projected_cost)}`,
+    projected: waiting ? "—" : `≈ $${Math.round(bill.projected_cost!)}`,
     period: `${shortDate(bill.period_start)} – ${shortDate(bill.period_end)} · day ${bill.day} of ${bill.days}`,
-    compare: `Last bill $${bill.last_charge.toFixed(2)} · on track for ${
-      bill.verdict === "about the same" ? "about the same" : `${pct}% ${bill.verdict}`
-    }`,
+    compare: waiting
+      ? "Not enough data yet to project"
+      : `Last bill $${bill.last_charge.toFixed(2)} · on track for ${
+          bill.verdict === "about the same" ? "about the same" : `${pct}% ${bill.verdict}`
+        }`,
     soFar: `$${Math.round(bill.cost_so_far)} so far · ${Math.round(bill.kwh_so_far)} kWh`,
     higher: bill.verdict === "more",
   };

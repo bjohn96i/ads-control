@@ -153,7 +153,8 @@ function ThisBill() {
       <p className="sub">{text.period} · estimate</p>
       <p className={text.higher ? "sub warn" : "sub"}>{text.compare}</p>
       <p className="sub">
-        {text.soFar} · projected {Math.round(data.projected_kwh)} kWh
+        {text.soFar}
+        {data.projected_kwh === null ? "" : ` · projected ${Math.round(data.projected_kwh)} kWh`}
         {data.manual_days > 0 ? ` · includes ${data.manual_days} days from the Refoss app` : ""}
       </p>
     </section>

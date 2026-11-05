@@ -11,10 +11,11 @@ from typing import Literal
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from adscontrol.energy import energy_by_zone, manual_days
+from adscontrol.energy import energy_by_zone, manual_days, manual_share
 from adscontrol.rates import LOCAL, all_in_cents, list_rates, version_in_force
 
 ABOUT_THE_SAME = 0.03
+MIN_DAYS_TO_PROJECT = 1.0
 
 
 def _midnight(day: date) -> datetime:
@@ -71,20 +72,21 @@ async def current_bill(session: AsyncSession, now: datetime) -> dict | None:
             else {"off_peak": 0.5, "super_off_peak": 0.5}
         )
     manual_cents = sum(share * all_in_cents(rate, period) for period, share in split.items())
-    manual_kwh = sum(manual.values())
+    manual_kwh, manual_covered_days = manual_share(manual, _midnight(start), measured_until)
 
     kwh_so_far = whole.kwh + manual_kwh
     energy_cost = whole.est_cost + manual_kwh * manual_cents / 100
     basic_day = rate.basic_per_day * rate.adder_factor  # the bill's percentage charges apply to it
-    elapsed = min(max((measured_until - _midnight(start)).total_seconds() / 86400, 0), days)
-    if kwh_so_far > 0 and elapsed > 0:
-        projected_kwh = kwh_so_far / elapsed * days
+    # Project from the time that has data, not the time elapsed: an outage would otherwise read as
+    # low use, and a few hours into a period are too little to scale up to a month.
+    measured_days = whole.coverage * (measured_until - _midnight(start)).total_seconds() / 86400
+    covered_days = manual_covered_days + measured_days
+    projected_kwh = projected_cost = change = None
+    if covered_days >= MIN_DAYS_TO_PROJECT and kwh_so_far > 0:
+        projected_kwh = kwh_so_far / covered_days * days
         projected_cost = projected_kwh * energy_cost / kwh_so_far + basic_day * days
-    else:
-        projected_kwh, projected_cost = 0.0, basic_day * days
-    change = (
-        (projected_cost - last.actual_charge) / last.actual_charge if last.actual_charge else 0.0
-    )
+        if last.actual_charge:
+            change = (projected_cost - last.actual_charge) / last.actual_charge
     return {
         "period_start": start,
         "period_end": end,
@@ -96,6 +98,6 @@ async def current_bill(session: AsyncSession, now: datetime) -> dict | None:
         "projected_cost": projected_cost,
         "last_charge": last.actual_charge,
         "change_pct": change,
-        "verdict": _verdict(change),
+        "verdict": None if change is None else _verdict(change),
         "manual_days": len(manual),
     }

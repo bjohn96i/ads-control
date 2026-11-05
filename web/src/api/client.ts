@@ -47,11 +47,12 @@ export type CurrentBill = {
   days: number;
   kwh_so_far: number;
   cost_so_far: number;
-  projected_kwh: number;
-  projected_cost: number;
+  // null until there's a day of data to project from
+  projected_kwh: number | null;
+  projected_cost: number | null;
   last_charge: number;
-  change_pct: number;
-  verdict: "less" | "more" | "about the same";
+  change_pct: number | null;
+  verdict: "less" | "more" | "about the same" | null;
   manual_days: number;
 };
 

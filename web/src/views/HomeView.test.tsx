@@ -264,6 +264,16 @@ describe("HomeView", () => {
     expect(await screen.findByText("Last bill $150.26 · on track for about the same")).toBeInTheDocument();
   });
 
+  it("this_bill_card_waits_for_a_day_of_data_before_projecting", async () => {
+    renderHome(LIVE, true, [], { actual_charge: 150.26, period_end: "2026-10-23" }, [], [], {
+      current: { ...ESTIMATE, day: 1, kwh_so_far: 6, cost_so_far: 1.2, projected_kwh: null, projected_cost: null, change_pct: null, verdict: null },
+    });
+    const link = (await screen.findByText(/^This bill/)).closest("a")!;
+    expect(await within(link).findByText("Not enough data yet to project")).toBeInTheDocument();
+    expect(within(link).getByText("$1 so far · 6 kWh")).toBeInTheDocument();
+    expect(link).not.toHaveTextContent("NaN");
+  });
+
   it("ac_card_has_real_controls_behind_the_pin", async () => {
     renderHome(LIVE, true, [], null, [{ id: 1, name: "Upstairs", stale: false, ambient_f: 74, setpoint_f: 72, heat_f: null, cool_f: 72, mode: "COOL", hvac_status: "COOLING", eco: false, online: true }], [], { unlocked: false });
     const card = (await screen.findByText(/^Upstairs ·/)).closest("section")!;
