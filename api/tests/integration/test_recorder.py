@@ -23,18 +23,24 @@ class _Client:
         return self.result
 
 
-def _recorder(engine, client, discovered=None):
+def _recorder(engine, client, discovered=None, uuid_path=None, used=None):
     discovered = [] if discovered is None else discovered
+    used = [] if used is None else used
 
     async def discover(host):
         discovered.append(host)
         return "uuid"
 
+    def make_client(host, uuid):
+        used.append(uuid)
+        return client
+
     return Recorder(
         "host",
         async_sessionmaker(engine),
         discover=discover,
-        make_client=lambda host, uuid: client,
+        make_client=make_client,
+        uuid_path=uuid_path,
     )
 
 
@@ -56,15 +62,30 @@ async def test_failed_poll_writes_nothing_and_marks_source_failed(engine, sessio
     assert await _count(session) == 0
 
 
-async def test_rediscovers_uuid_after_refoss_error(engine):
+async def test_a_read_error_reuses_the_remembered_uuid(engine, tmp_path):
+    """Discovery is a Wi-Fi broadcast the monitor often misses; a read error must not depend on it."""
     client = _Client(RefossError("closed"))
     discovered: list[str] = []
-    recorder = _recorder(engine, client, discovered)
+    recorder = _recorder(engine, client, discovered, uuid_path=tmp_path / "refoss_uuid")
     with pytest.raises(RefossError):
         await recorder.poll()
     client.result = _readings()
     await recorder.poll()
-    assert discovered == ["host", "host"]
+    assert discovered == ["host"]
+
+
+async def test_a_remembered_uuid_skips_discovery(engine, tmp_path):
+    (tmp_path / "refoss_uuid").write_text("abc\n")
+    discovered: list[str] = []
+    used: list[str] = []
+    await _recorder(engine, _Client(_readings()), discovered, tmp_path / "refoss_uuid", used).poll()
+    assert discovered == []
+    assert used == ["abc"]
+
+
+async def test_a_discovered_uuid_is_remembered(engine, tmp_path):
+    await _recorder(engine, _Client(_readings()), uuid_path=tmp_path / "refoss_uuid").poll()
+    assert (tmp_path / "refoss_uuid").read_text().strip() == "uuid"
 
 
 async def test_uuid_is_kept_between_good_polls(engine):

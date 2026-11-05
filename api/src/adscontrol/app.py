@@ -66,7 +66,7 @@ def create_app(
             settings.nest_token_path,
         )
     if jobs is None:
-        recorder = Recorder(settings.refoss_host, sessions)
+        recorder = Recorder(settings.refoss_host, sessions, uuid_path=settings.refoss_uuid_path)
 
         async def detect() -> None:
             async with sessions() as session:

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     traffic_cameras_path: Path = ROOT_DIR / "data" / "traffic_cameras.yaml"
     # While this file exists the recorder jobs stay off, so a new deployment can wait for cutover.
     hold_path: Path = ROOT_DIR / "data" / "hold"
+    refoss_uuid_path: Path = ROOT_DIR / "data" / "refoss_uuid"
     lanthorn_url: str = (
         "http://localhost:8000"  # the sister network app; browsers open its links too
     )
