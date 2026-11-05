@@ -132,6 +132,7 @@ async def test_bill_range_without_a_bill_is_last_30_days(api, session):
     )
     bill = (await api.get("/api/energy/ranking?range=bill")).json()
     assert _zone(bill, "Dishwasher")["kwh"] == pytest.approx(1.0)
+    assert bill["since_bill"] is False
     assert (bill["start"], bill["end"]) == (
         (await api.get("/api/energy/ranking?range=30d")).json()["start"],
         (await api.get("/api/energy/ranking?range=30d")).json()["end"],
@@ -224,3 +225,15 @@ async def test_bill_series_keeps_every_hour_across_the_dst_change(session, migra
     await session.commit()
     times = [datetime.fromisoformat(p["time"]) for p in series]
     assert {b - a for a, b in zip(times, times[1:], strict=False)} == {timedelta(hours=1)}
+
+
+async def test_a_room_name_with_a_slash_still_opens(api, session):
+    await session.execute(text("UPDATE zones SET room = 'Up/Down' WHERE room = 'Kitchen'"))
+    await session.commit()
+    try:
+        response = await api.get("/api/energy/rooms/Up%2FDown?range=7d")
+    finally:
+        await session.execute(text("UPDATE zones SET room = 'Kitchen' WHERE room = 'Up/Down'"))
+        await session.commit()
+    assert response.status_code == 200
+    assert response.json()["name"] == "Up/Down"

@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     refoss_host: str = "192.168.4.254"
     bind_host: str = "0.0.0.0"  # phones on the home Wi-Fi use the maintenance page
     port: int = 8100
+    # The house's own names for this Mac (see deploy/Caddyfile). Anything else is refused, which stops a
+    # DNS-rebinding page from reading the API; a new IP or name goes here (ALLOWED_HOSTS in .env).
+    allowed_hosts: list[str] = [
+        "localhost",
+        "127.0.0.1",
+        "192.168.4.41",
+        "MacBook-Air-2.local",
+        "control.home.arpa",
+    ]
     allow_insecure_pin: bool = False  # local development only; PIN and cameras then use plain HTTP
     google_client_id: str = ""
     google_client_secret: SecretStr = SecretStr("")

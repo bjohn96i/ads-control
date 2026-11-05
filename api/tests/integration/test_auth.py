@@ -218,3 +218,42 @@ async def test_energy_and_maintenance_remain_open(api):
     assert (await api.get("/api/maintenance")).status_code == 200
     assert (await api.get("/api/energy/ranking?range=7d")).status_code == 200
     assert (await api.get("/api/bills")).status_code == 200
+
+
+async def test_simultaneous_wrong_guesses_each_count(api, session):
+    import asyncio
+
+    codes = [
+        r.status_code for r in await asyncio.gather(*(_enter(api, "000000") for _ in range(10)))
+    ]
+    assert codes.count(401) == MAX_ATTEMPTS
+    assert codes.count(429) == 10 - MAX_ATTEMPTS
+    assert await session.scalar(text("SELECT failures FROM auth_settings")) == MAX_ATTEMPTS
+
+
+async def test_a_forwarded_https_claim_counts_only_from_caddy_on_this_mac(
+    session, migrated_db, clock
+):
+    await session.execute(text("TRUNCATE auth_settings"))
+    await set_pin(session, PIN)
+    await session.commit()
+    app = create_app(Settings(database_url=migrated_db), jobs=[], start_jobs=False)
+    app.state.clock = clock
+    claim = {**HEADERS, "X-Forwarded-Proto": "https"}
+    phone = httpx.ASGITransport(app=app, client=("192.168.4.20", 50000))
+    async with httpx.AsyncClient(transport=phone, base_url="http://192.168.4.41:8100") as c:
+        assert (await c.post("/api/auth/pin", json={"pin": PIN}, headers=claim)).status_code == 400
+    caddy = httpx.ASGITransport(app=app, client=("127.0.0.1", 50000))
+    async with httpx.AsyncClient(transport=caddy, base_url="http://192.168.4.41") as c:
+        assert (await c.post("/api/auth/pin", json={"pin": PIN}, headers=claim)).status_code == 200
+
+
+async def test_requests_for_other_hostnames_are_refused(migrated_db, clock):
+    """A DNS-rebinding page arrives with its own hostname; the house's addresses are the only ones served."""
+    app = create_app(Settings(database_url=migrated_db), jobs=[], start_jobs=False)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://evil.example:8100") as c:
+        assert (await c.get("/api/maintenance")).status_code == 400
+    for host in ("192.168.4.41:8100", "MacBook-Air-2.local", "control.home.arpa", "localhost:8100"):
+        async with httpx.AsyncClient(transport=transport, base_url=f"http://{host}") as c:
+            assert (await c.get("/api/auth/status")).status_code == 200, host

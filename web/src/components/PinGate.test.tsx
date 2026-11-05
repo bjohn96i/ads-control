@@ -83,4 +83,17 @@ describe("PinGate", () => {
     expect(await screen.findByText(/adscontrol pin set/)).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("secret content")).not.toBeInTheDocument());
   });
+
+  it("a_failed_status_check_says_so_instead_of_vanishing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 500 })));
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <PinGate>
+          <p>secret content</p>
+        </PinGate>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(/can.t check the pin/i);
+    expect(screen.queryByText("secret content")).not.toBeInTheDocument();
+  });
 });

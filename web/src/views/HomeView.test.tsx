@@ -12,8 +12,6 @@ const LIVE = {
   unmetered_w: 94,
   cost_per_hour_estimate: 0.115,
   rate_period: "super_off_peak",
-  month_kwh: 26.2,
-  month_coverage: 0.05,
   outdoor_f: 68,
   today_kwh: 31.4,
   today_cost: 4.12,

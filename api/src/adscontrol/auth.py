@@ -1,5 +1,6 @@
 """The household PIN. Hash and lockout live in the database, so a restart resets neither."""
 
+import asyncio
 import hashlib
 import hmac
 import re
@@ -85,8 +86,9 @@ def session_is_valid(row: AuthRow, value: str | None, now: datetime) -> bool:
     )
 
 
-def pin_matches(row: AuthRow, pin: str) -> bool:
-    return hmac.compare_digest(_hash(pin, row.pin_salt), row.pin_hash)
+async def pin_matches(row: AuthRow, pin: str) -> bool:
+    # scrypt takes tens of milliseconds; off the event loop, it doesn't stall the recorder.
+    return hmac.compare_digest(await asyncio.to_thread(_hash, pin, row.pin_salt), row.pin_hash)
 
 
 def lockout_seconds(failures: int) -> int:
@@ -97,9 +99,11 @@ def lockout_seconds(failures: int) -> int:
 
 
 def is_secure(request: Request) -> bool:
+    # Only Caddy, on this Mac, may say a request came in over HTTPS; anyone else could just claim it.
+    from_proxy = request.client is not None and request.client.host in ("127.0.0.1", "::1")
     return (
         request.url.scheme == "https"
-        or request.headers.get("x-forwarded-proto") == "https"
+        or (from_proxy and request.headers.get("x-forwarded-proto") == "https")
         or request.app.state.settings.allow_insecure_pin
     )
 

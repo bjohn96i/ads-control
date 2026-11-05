@@ -71,10 +71,6 @@ def _charger_estimate(rows, zones) -> float:
     return sum(unexplained) / len(unexplained)
 
 
-def _month_start(now: datetime) -> datetime:
-    return now.astimezone(LOCAL).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-
 def _day_start(now: datetime) -> datetime:
     return now.astimezone(LOCAL).replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -98,7 +94,6 @@ async def live(request: Request) -> dict:
         ).all()
         zones = await list_zones(session)
         rate = await rate_for(session, now.astimezone(LOCAL).date())
-        month = await energy_by_zone(session, _month_start(now), now)
         flags = await open_findings(session)
         recent = (await session.execute(_RECENT, {"since": now - CHARGER_WINDOW, "now": now})).all()
         today = await _today(request, session, now)
@@ -129,8 +124,8 @@ async def live(request: Request) -> dict:
         else max(0.0, whole - sum(watts.values()))
     )
     period = rate_period(now)
-    month_whole = next((e for e in month if e.name == "Whole House"), None)
-    today_whole = next((e for e in today if e.name == "Whole House"), None)
+    whole_id = incoming.id if incoming else None
+    today_whole = next((e for e in today if e.zone_id == whole_id), None)
     fresh_outdoor = outdoor is not None and now - outdoor.time <= OUTDOOR_STALE
     return {
         "as_of": as_of,
@@ -155,8 +150,6 @@ async def live(request: Request) -> dict:
             }
             for z in circuits
         ],
-        "month_kwh": month_whole.kwh if month_whole else 0.0,
-        "month_coverage": month_whole.coverage if month_whole else 0.0,
         "outdoor_f": outdoor.temp_c * 9 / 5 + 32 if fresh_outdoor else None,
         "outdoor_code": outdoor.weather_code if fresh_outdoor else None,
         "outdoor_is_day": outdoor.is_day if fresh_outdoor else None,

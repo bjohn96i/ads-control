@@ -15,11 +15,18 @@ export function PinGate({ children }: { children: ReactNode }) {
   const client = useQueryClient();
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey: ["auth-status"],
     queryFn: () => getJson<{ pin_set: boolean; unlocked: boolean }>("/api/auth/status"),
   });
 
+  if (isError) {
+    return (
+      <p className="warn" role="alert">
+        Can't check the PIN right now. Reload to try again.
+      </p>
+    );
+  }
   if (!data) return null;
   if (data.unlocked) return <>{children}</>;
   if (!data.pin_set) {

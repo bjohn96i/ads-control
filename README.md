@@ -70,6 +70,11 @@ phone, install Caddy's root certificate from
 under Settings > General > About > Certificate Trust Settings. That certificate lets its holder
 vouch for any site on that phone, so keep the Mac's copy of its private key private.
 
+The server answers only to this Mac's own addresses (`192.168.4.41`, `MacBook-Air-2.local`,
+`control.home.arpa`, `localhost`), which stops a web page elsewhere from reaching it through a
+rebinding trick. If the Mac's IP or name changes, set `ALLOWED_HOSTS` in `.env` (a JSON list) and
+update `deploy/Caddyfile` to match. The **Lock** button in the sidebar signs this device out.
+
 Five wrong PINs lock it for a minute, doubling up to an hour, for everyone. Changing the PIN signs
 every device out. For local development without HTTPS, set `ALLOW_INSECURE_PIN=true`.
 

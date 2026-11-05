@@ -46,7 +46,7 @@ async def enter_pin(body: PinIn, request: Request, response: Response) -> dict:
     if not is_secure(request):
         raise HTTPException(status_code=400, detail="use the HTTPS address")
     now = request.app.state.clock()
-    async with request.app.state.sessions() as session:
+    async with request.app.state.pin_lock, request.app.state.sessions() as session:
         row = await load(session)
         if row is None:
             raise HTTPException(status_code=409, detail="no PIN has been set")
@@ -56,7 +56,7 @@ async def enter_pin(body: PinIn, request: Request, response: Response) -> dict:
             raise HTTPException(
                 status_code=429, detail="too many tries", headers={"Retry-After": str(wait)}
             )
-        if not pin_matches(row, body.pin):
+        if not await pin_matches(row, body.pin):
             failures = row.failures + 1
             wait = lockout_seconds(failures)
             await session.execute(

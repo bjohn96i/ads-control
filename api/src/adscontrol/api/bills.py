@@ -105,10 +105,13 @@ async def import_(body: BillsIn, request: Request) -> dict:
 @router.post("/parse", dependencies=write)
 async def parse(request: Request) -> dict:
     """Reads the PDF and returns a draft. Saving is a separate step, after a person checks it."""
-    body = await request.body()
-    if len(body) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="that file is too large")
-    return parse_bill(body).model_dump()
+    # Read in pieces and stop at the limit, so a huge upload is never held in memory.
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="that file is too large")
+    return parse_bill(bytes(body)).model_dump()
 
 
 @router.post("", status_code=201, dependencies=write)
@@ -145,7 +148,8 @@ async def compare(bill_id: int, request: Request) -> dict:
         start = local_midnight(bill.period_start)
         end = local_midnight(bill.period_end + timedelta(days=1))
         energy = await energy_by_zone(session, start, end)
-    whole = next(e for e in energy if e.name == "Whole House")
+        whole_id = await session.scalar(text("SELECT id FROM zones WHERE kind = 'incoming'"))
+    whole = next(e for e in energy if e.zone_id == whole_id)
     trusted = whole.coverage >= COMPARE_MIN_COVERAGE and bill.total_kwh > 0
     return {
         "billed_kwh": bill.total_kwh,

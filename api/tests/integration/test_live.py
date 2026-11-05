@@ -90,11 +90,11 @@ async def test_cost_uses_current_rate_period(session, migrated_db):
     assert body["cost_per_hour_estimate"] == pytest.approx(0.416, abs=0.001)
 
 
-async def test_month_coverage_reports_gap(session, migrated_db):
+async def test_live_skips_month_totals_no_page_uses(session, migrated_db):
+    # Recomputed every 5 s per open page; the home page shows today instead.
     await _sample(session, {**FULL, 1: 1000.0})
     body = await _get(migrated_db)
-    assert body["month_coverage"] < 0.01
-    assert body["month_kwh"] >= 0
+    assert "month_kwh" not in body and "month_coverage" not in body
 
 
 async def _charging(session, seconds_ago: list[int], whole: float):
@@ -218,3 +218,15 @@ async def test_today_is_reused_for_a_minute(session, migrated_db):
         assert (await client.get("/api/live")).json()["today_kwh"] == first
         app.state.clock = lambda: NOW + timedelta(seconds=61)
         assert (await client.get("/api/live")).json()["today_kwh"] > first
+
+
+async def test_today_still_counts_when_the_whole_house_zone_is_renamed(session, migrated_db):
+    await session.execute(text("UPDATE zones SET name = 'Mains' WHERE kind = 'incoming'"))
+    await session.commit()
+    try:
+        await _sample(session, {**FULL, 1: 2000.0}, NOW - timedelta(minutes=10))
+        body = await _get(migrated_db)
+    finally:
+        await session.execute(text("UPDATE zones SET name = 'Whole House' WHERE kind = 'incoming'"))
+        await session.commit()
+    assert body["today_kwh"] > 0

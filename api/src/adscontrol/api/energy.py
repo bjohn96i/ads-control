@@ -15,18 +15,19 @@ router = APIRouter(prefix="/api/energy")
 Range = Literal["bill", "7d", "30d"]
 
 
-async def _span(request: Request, session, range_: str) -> tuple[datetime, datetime]:
+async def _span(request: Request, session, range_: str) -> tuple[datetime, datetime, bool]:
+    """Start, end, and whether the start really is the day after the last bill."""
     now: datetime = request.app.state.clock()
     if range_ == "bill":
         last_end = await session.scalar(text("SELECT max(period_end) FROM bills"))
         if last_end is not None:
             start = datetime.combine(last_end + timedelta(days=1), time.min, tzinfo=LOCAL)
             if start < now:
-                return start, now
+                return start, now, True
     days = 7 if range_ == "7d" else 30
     # Whole hours, so the rollups' first bucket is not a partial one.
     start = (now - timedelta(days=days)).replace(minute=0, second=0, microsecond=0)
-    return start, now
+    return start, now, False
 
 
 def _line(kwh: float, cost: float, coverage: float, total: float) -> dict:
@@ -41,7 +42,7 @@ def _line(kwh: float, cost: float, coverage: float, total: float) -> dict:
 @router.get("/ranking")
 async def ranking(request: Request, range: Range = "bill") -> dict:  # noqa: A002
     async with request.app.state.sessions() as session:
-        start, end = await _span(request, session, range)
+        start, end, since_bill = await _span(request, session, range)
         energy = await energy_by_zone(session, start, end)
         charger_kwh, charger_cost = await charger_estimate(session, start, end)
         zones = {
@@ -55,6 +56,7 @@ async def ranking(request: Request, range: Range = "bill") -> dict:  # noqa: A00
     return {
         "start": start,
         "end": end,
+        "since_bill": since_bill,
         "zones": [
             {
                 "id": e.zone_id,
@@ -86,7 +88,7 @@ async def zone_detail(zone_id: int, request: Request, range: Range = "bill") -> 
     return await _detail(request, range, _ZONES + "id = :k", zone_id)
 
 
-@router.get("/rooms/{room}")
+@router.get("/rooms/{room:path}")
 async def room_detail(room: str, request: Request, range: Range = "bill") -> dict:  # noqa: A002
     return await _detail(request, range, _ZONES + "room = :k AND kind = 'circuit'", room)
 
@@ -97,7 +99,7 @@ async def _detail(request: Request, range_: str, query: str, key: int | str) -> 
         zones = (await session.execute(text(query), {"k": key})).all()
         if not zones:
             raise HTTPException(status_code=404, detail="no such zone")
-        start, end = await _span(request, session, range_)
+        start, end, _ = await _span(request, session, range_)
         findings = await open_findings(session)
         hours = []
         for zone in zones:

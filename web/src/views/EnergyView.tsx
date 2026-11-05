@@ -7,6 +7,9 @@ import { formatKwh, formatWatts } from "../components/format";
 type EnergyLine = { kwh: number; est_cost: number; share: number; coverage: number };
 type RankedZone = EnergyLine & { id: number; name: string; room: string | null };
 type Ranking = {
+  start: string;
+  end: string;
+  since_bill: boolean;
   zones: RankedZone[];
   charger_estimate: EnergyLine;
   unmetered: EnergyLine;
@@ -102,10 +105,17 @@ function byRoom(zones: RankedZone[]) {
 
 /** The picture is cropped to the place's label, or shown whole for the whole house. */
 function ZonePanel({ path, range, place, eyebrow }: { path: string; range: string; place: LiveZone | "whole" | undefined; eyebrow: string }) {
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey: ["energy-detail", path, range],
     queryFn: () => getJson<ZoneDetail>(`${path}?range=${range}`),
   });
+  if (isError) {
+    return (
+      <section className="card zone-panel">
+        <p className="warn">Can't load this detail right now. Reload to try again.</p>
+      </section>
+    );
+  }
   if (!data) return null;
   return (
     <section className="card zone-panel">
@@ -186,7 +196,14 @@ export function EnergyView() {
   const placeOf = (id: number) => live.data?.zones.find((z) => z.id === id);
   const roomPlace = live.data?.zones.find((z) => z.room === room);
   const [costWhole, costCents] = (data?.whole_house.est_cost ?? 0).toFixed(2).split(".");
-  const label = RANGES.find((r) => r.value === range)?.label ?? "";
+  // With no bill saved, "This bill" falls back to the last 30 days; say so rather than mislabel it.
+  const label =
+    range === "bill"
+      ? data?.since_bill
+        ? "Since the last bill"
+        : "Last 30 days, no bill yet"
+      : (RANGES.find((r) => r.value === range)?.label ?? "");
+  const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
   return (
     <main className="page">
@@ -216,6 +233,9 @@ export function EnergyView() {
             <div className="card">
               <div className="eyebrow">Used · {label}</div>
               <div className="big">{kwh(data.whole_house.kwh)}</div>
+              <p className="sub">
+                {day(data.start)} – {day(data.end)}
+              </p>
             </div>
             <div className="card">
               <div className="eyebrow">Estimated cost</div>

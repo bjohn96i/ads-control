@@ -12,8 +12,9 @@ const line = (kwh: number, est_cost: number, share: number, coverage = 0.98) => 
 });
 
 const RANKING = {
-  start: "2026-10-01T00:00:00Z",
-  end: "2026-10-31T00:00:00Z",
+  start: "2026-10-24T00:00:00-04:00",
+  end: "2026-11-04T12:00:00-05:00",
+  since_bill: true,
   zones: [
     { id: 3, name: "Dishwasher", room: "Kitchen", ...line(120.4, 21.5, 0.2) },
     { id: 6, name: "Basement", room: "John's Office", ...line(90, 12.25, 0.15) },
@@ -221,5 +222,31 @@ describe("EnergyView", () => {
       </QueryClientProvider>,
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(/can.t reach/i);
+  });
+
+  it("shows_the_dates_the_figures_cover", async () => {
+    show();
+    const used = (await screen.findByText(/^Used ·/)).closest<HTMLElement>(".card")!;
+    expect(used).toHaveTextContent("Since the last bill");
+    expect(used).toHaveTextContent("Oct 24 – Nov 4");
+  });
+
+  it("says_when_this_bill_is_really_the_last_30_days", async () => {
+    show({ ...RANKING, since_bill: false });
+    const used = (await screen.findByText(/^Used ·/)).closest<HTMLElement>(".card")!;
+    expect(used).toHaveTextContent("Last 30 days, no bill yet");
+  });
+
+  it("a_failed_detail_load_says_so_instead_of_vanishing", async () => {
+    const ok = show();
+    ok.mockImplementation(async (url: string) =>
+      url.startsWith("/api/energy/zones/")
+        ? new Response("{}", { status: 500 })
+        : url === "/api/live"
+          ? new Response(JSON.stringify(LIVE))
+          : new Response(JSON.stringify(RANKING)),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Dishwasher" }));
+    expect(await screen.findByText(/can.t load this detail/i)).toBeInTheDocument();
   });
 });

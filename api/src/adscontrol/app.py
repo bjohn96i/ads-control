@@ -1,5 +1,6 @@
 """FastAPI application factory: wires the database, jobs and routes."""
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -9,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from adscontrol.api import (
     auth,
@@ -94,12 +96,16 @@ def create_app(
         await engine.dispose()
 
     app = FastAPI(title="ADS-Control", lifespan=lifespan)
+
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
     app.state.settings = settings
     app.state.sdm = sdm
     app.state.sessions = sessions
     app.state.source_states = states
     app.state.db_check = db_check or _db_check
     app.state.clock = lambda: datetime.now(timezone.utc)
+    # One PIN check at a time, so simultaneous wrong guesses each count towards the lockout.
+    app.state.pin_lock = asyncio.Lock()
     app.include_router(health.router)
     app.include_router(live.router)
     app.include_router(auth.router)

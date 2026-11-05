@@ -157,6 +157,7 @@ async def test_bill_range_starts_after_the_latest_bill(api, session):
     await api.post("/api/bills", json=BILL, headers=HEADERS)
     body = (await api.get("/api/energy/ranking?range=bill")).json()
     assert body["start"] == "2026-10-24T00:00:00-04:00"
+    assert body["since_bill"] is True
 
 
 async def test_export_import_round_trip(api, session):
@@ -169,3 +170,30 @@ async def test_export_import_round_trip(api, session):
     r = await api.post("/api/bills/import", json=exported, headers=HEADERS)
     assert r.json()["bills"] == 0
     assert (await api.get("/api/bills/latest")).json()["running_difference"] == -260.13
+
+
+async def test_compare_still_works_when_the_whole_house_zone_is_renamed(api, session):
+    body = {**BILL, "period_start": "2026-10-20", "period_end": "2026-10-20", "total_kwh": 20}
+    bill_id = (await api.post("/api/bills", json=body, headers=HEADERS)).json()["id"]
+    await session.execute(text("UPDATE zones SET name = 'Mains' WHERE kind = 'incoming'"))
+    await session.commit()
+    try:
+        response = await api.get(f"/api/bills/{bill_id}/compare")
+    finally:
+        await session.execute(text("UPDATE zones SET name = 'Whole House' WHERE kind = 'incoming'"))
+        await session.commit()
+    assert response.status_code == 200
+
+
+async def test_an_oversized_upload_is_refused_without_reading_it_all(api):
+    sent = 0
+
+    async def chunks():
+        nonlocal sent
+        for _ in range(100):
+            sent += 1
+            yield b"x" * 1_000_000
+
+    r = await api.post("/api/bills/parse", content=chunks(), headers=HEADERS)
+    assert r.status_code == 413
+    assert sent * 1_000_000 <= MAX_UPLOAD_BYTES + 2_000_000

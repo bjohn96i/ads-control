@@ -8,6 +8,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from adscontrol.db.migrate import upgrade_head
 
+# Test clients use the hosts "t" and "testserver"; the house's own names stay allowed too.
+os.environ.setdefault(
+    "ALLOWED_HOSTS",
+    '["t", "testserver", "localhost", "127.0.0.1", "192.168.4.41", "MacBook-Air-2.local", "control.home.arpa"]',
+)
+
 
 @pytest.fixture(scope="session")
 def pg_url():

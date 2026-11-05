@@ -20,8 +20,6 @@ export type Live = {
   cost_per_hour_estimate: number | null;
   rate_period: RatePeriod;
   zones: LiveZone[];
-  month_kwh: number;
-  month_coverage: number;
   outdoor_f: number | null;
   outdoor_code: number | null;
   outdoor_is_day: boolean | null;
