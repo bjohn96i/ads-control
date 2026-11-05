@@ -204,3 +204,23 @@ async def test_room_hour_missing_a_circuit_is_a_gap_not_a_low(api, session):
 
 async def test_unknown_room_is_404(api):
     assert (await api.get("/api/energy/rooms/Attic?range=7d")).status_code == 404
+
+
+async def test_bill_series_keeps_every_hour_across_the_dst_change(session, migrated_db):
+    await session.execute(text("TRUNCATE bills"))
+    await session.execute(
+        text(
+            "INSERT INTO bills (period_start, period_end, total_kwh, actual_charge) "
+            "VALUES ('2026-09-24', '2026-10-23', 1058, 150.26)"
+        )
+    )
+    await session.commit()
+    app = create_app(Settings(database_url=migrated_db), jobs=[], start_jobs=False)
+    app.state.clock = lambda: datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
+    zone_id = await session.scalar(text("SELECT id FROM zones WHERE name = 'Dishwasher'"))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
+        series = (await c.get(f"/api/energy/zones/{zone_id}?range=bill")).json()["series"]
+    await session.execute(text("TRUNCATE bills"))
+    await session.commit()
+    times = [datetime.fromisoformat(p["time"]) for p in series]
+    assert {b - a for a, b in zip(times, times[1:], strict=False)} == {timedelta(hours=1)}

@@ -26,7 +26,7 @@ const thermostat = (over: object = {}) => ({
 
 let calls: { url: string; body: any }[];
 
-function show(thermostats: object[], { unlocked = true, setStatus = 200, detail = "" } = {}) {
+function show(thermostats: object[], { unlocked = true, setStatus = 200, detail = "", feedStopped = null as object | null } = {}) {
   calls = [];
   vi.stubGlobal(
     "fetch",
@@ -36,7 +36,7 @@ function show(thermostats: object[], { unlocked = true, setStatus = 200, detail 
         return new Response(JSON.stringify({ ok: true, detail }), { status: setStatus });
       }
       if (url === "/api/auth/status") return new Response(JSON.stringify({ pin_set: true, unlocked }));
-      return new Response(JSON.stringify({ thermostats, rate_period: "off_peak" }));
+      return new Response(JSON.stringify({ thermostats, rate_period: "off_peak", feed_stopped: feedStopped }));
     }),
   );
   render(
@@ -162,5 +162,10 @@ describe("ClimateView", () => {
     show([thermostat({ on_peak_flag: true })]);
     const c = await card("Upstairs");
     expect(c.getByText(/on-peak/i)).toBeInTheDocument();
+  });
+
+  it("says when the thermostats have stopped reporting, and how to fix it", async () => {
+    show([thermostat()], { feedStopped: { since: null } });
+    expect(await screen.findByRole("status")).toHaveTextContent(/Not hearing from the thermostats.*adscontrol nest login/);
   });
 });

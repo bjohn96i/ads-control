@@ -1,4 +1,4 @@
-"""Outdoor temperature and conditions from Open-Meteo. Only a city-level location ever leaves the house."""
+"""Outdoor temperature and conditions from Open-Meteo. Only a city-level location (one decimal, ~11 km) ever leaves the house."""
 
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -21,8 +21,8 @@ class WeatherRecorder:
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self._params = {
-            "latitude": round(lat, 2),
-            "longitude": round(lon, 2),
+            "latitude": round(lat, 1),
+            "longitude": round(lon, 1),
             "current": "temperature_2m,weather_code,is_day",
         }
         self._sessions = sessions

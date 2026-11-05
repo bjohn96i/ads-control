@@ -49,9 +49,15 @@ class Scheduler:
         return True
 
     async def _loop(self, job: Job) -> None:
+        # Energy maths counts each sample as one interval, so polls keep to a fixed timetable:
+        # the poll's own time and any late wake-up come out of the next wait instead of adding up.
+        loop = asyncio.get_running_loop()
+        due = loop.time()
         while True:
             await self.run_once(job)
-            await asyncio.sleep(job.interval_s)
+            # A poll that overran a whole interval starts the timetable again rather than bursting.
+            due = max(due + job.interval_s, loop.time())
+            await asyncio.sleep(due - loop.time())
 
     async def start(self) -> None:
         self._tasks = [asyncio.create_task(self._loop(j), name=j.name) for j in self._jobs]

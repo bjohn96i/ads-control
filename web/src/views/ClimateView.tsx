@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { FeedStopped, type Stopped } from "../components/FeedStopped";
 import { getJson } from "../api/client";
 import { ThermostatControls } from "../components/ThermostatControls";
 
@@ -129,7 +130,7 @@ export function ClimateView() {
   const [error, setError] = useState<string | null>(null);
   const { data, isError } = useQuery({
     queryKey: ["climate", range],
-    queryFn: () => getJson<{ thermostats: ThermostatView[] }>(`/api/climate?range=${range}`),
+    queryFn: () => getJson<{ thermostats: ThermostatView[]; feed_stopped: Stopped }>(`/api/climate?range=${range}`),
     refetchInterval: 60_000,
   });
 
@@ -152,6 +153,7 @@ export function ClimateView() {
       </header>
       <p className="sub">A change here lasts like one made on the thermostat. The Nest schedule isn't changed.</p>
       <p className="sub">Gas heat isn't measured here, so winter shows only what runs on electricity.</p>
+      <FeedStopped stopped={data?.feed_stopped} text="Not hearing from the thermostats" />
       {error ? (
         <p className="warn" role="alert">
           {error}

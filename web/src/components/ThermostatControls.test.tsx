@@ -20,7 +20,7 @@ const state = (over: Partial<ThermostatState> = {}): ThermostatState => ({
 
 let posts: { url: string; body: unknown }[];
 
-function show(t: ThermostatState, unlocked = true, setStatus = 200) {
+function show(t: ThermostatState, unlocked = true, setStatus = 200, hold?: Promise<void>) {
   posts = [];
   let locked = !unlocked;
   vi.stubGlobal(
@@ -28,6 +28,7 @@ function show(t: ThermostatState, unlocked = true, setStatus = 200) {
     vi.fn(async (url: string, init?: RequestInit) => {
       if ((init?.method ?? "GET") !== "GET") {
         posts.push({ url, body: JSON.parse(init!.body as string) });
+        if (hold) await hold;
         // The session ran out: the server refuses, and asks for the PIN from now on.
         if (setStatus === 401) locked = true;
         return new Response(JSON.stringify({ ok: setStatus === 200 }), { status: setStatus });
@@ -71,5 +72,22 @@ describe("ThermostatControls", () => {
     show(state(), false);
     expect(await screen.findByLabelText("Household PIN")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Warmer" })).not.toBeInTheDocument();
+  });
+
+  it("after Set it says the change was sent until the thermostat reports it", async () => {
+    show(state());
+    fireEvent.click(await screen.findByRole("button", { name: "Warmer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Set to 73°" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Sent 73°");
+  });
+
+  it("Set can't be pressed twice while the change is on its way", async () => {
+    let release!: () => void;
+    show(state(), true, 200, new Promise<void>((resolve) => (release = resolve)));
+    fireEvent.click(await screen.findByRole("button", { name: "Warmer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Set to 73°" }));
+    expect(screen.getByRole("button", { name: "Set to 73°" })).toBeDisabled();
+    release();
+    await vi.waitFor(() => expect(posts).toHaveLength(1));
   });
 });

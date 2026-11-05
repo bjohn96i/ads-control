@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { getJson, type Live, type MaintenanceTask } from "../api/client";
 import { dueText, formatKwh, formatWatts } from "./format";
+import { FeedStopped, type Stopped } from "./FeedStopped";
 import { PinGate } from "./PinGate";
 import { blocked, type ThermostatState, ThermostatControls } from "./ThermostatControls";
 
@@ -25,7 +26,7 @@ export function AcCard() {
   const unlocked = auth.data?.unlocked ?? false;
   const { data } = useQuery({
     queryKey: ["climate-summary"],
-    queryFn: () => getJson<{ thermostats: ThermostatState[] }>("/api/climate/summary"),
+    queryFn: () => getJson<{ thermostats: ThermostatState[]; feed_stopped: Stopped }>("/api/climate/summary"),
     refetchInterval: 60_000,
   });
   return (
@@ -36,6 +37,7 @@ export function AcCard() {
           →
         </Link>
       </div>
+      <FeedStopped stopped={data?.feed_stopped} text="Not hearing from the thermostats" />
       {data && data.thermostats.length === 0 ? <p className="sub">No thermostats paired</p> : null}
       {data?.thermostats.map((t) => (
         <div key={t.id} className="therm">

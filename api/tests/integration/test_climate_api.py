@@ -280,9 +280,42 @@ async def test_weather_poll_stores_and_sends_only_rounded_location(session, migr
             33.749, -84.388, async_sessionmaker(engine), clock=lambda: OCT
         ).poll()
     await engine.dispose()
-    assert route.calls[0].request.url.params["latitude"] == "33.75"
+    assert route.calls[0].request.url.params["latitude"] == "33.8"
     assert route.calls[0].request.url.params["longitude"] == "-84.3"
     assert await session.scalar(text("SELECT temp_c FROM outdoor_readings")) == 12.5
     assert route.calls[0].request.url.params["current"] == "temperature_2m,weather_code,is_day"
     row = (await session.execute(text("SELECT weather_code, is_day FROM outdoor_readings"))).one()
     assert (row.weather_code, row.is_day) == (61, False)
+
+
+async def test_estimate_leaves_out_part_recorded_days(session, migrated_db, seeded, monkeypatch):
+    from adscontrol.api import climate as climate_api
+
+    seen = []
+    monkeypatch.setattr(climate_api, "cooling_estimate", lambda days, **_: seen.extend(days))
+    full = datetime(2026, 10, 13, 4, 0, tzinfo=timezone.utc)  # midnight Eastern
+    half = full + timedelta(days=1)
+    await _ac(session, full, full + timedelta(days=1), 1000.0)
+    await _ac(session, half, half + timedelta(hours=12), 1000.0)  # the Mac slept the rest
+    for day in (full, half):
+        await _reading(session, seeded, day + timedelta(hours=15))
+        await session.execute(
+            text("INSERT INTO outdoor_readings (time, temp_c) VALUES (:t, 30)"),
+            {"t": day + timedelta(hours=15)},
+        )
+    await session.commit()
+    async with await _client(session, migrated_db, OCT) as c:
+        await c.get("/api/climate?range=7d")
+    assert [d.day.isoformat() for d in seen] == ["2026-10-13"]
+
+
+async def test_summary_says_when_the_thermostat_feed_has_stopped(session, migrated_db, seeded):
+    from adscontrol.scheduler import SourceState
+
+    async with await _client(session, migrated_db, OCT) as c:
+        assert (await c.get("/api/climate/summary")).json()["feed_stopped"] is None
+        c._transport.app.state.source_states["nest"] = SourceState(
+            60, last_error="RefreshError: invalid_grant"
+        )
+        assert (await c.get("/api/climate/summary")).json()["feed_stopped"] == {"since": None}
+        assert (await c.get("/api/climate?range=1d")).json()["feed_stopped"] == {"since": None}

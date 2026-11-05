@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { FeedStopped, type Stopped } from "../components/FeedStopped";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type CameraEvent, type CameraInfo, getJson, send, type TrafficCamera } from "../api/client";
 import { CameraEventTable, eventText } from "../components/CameraEvents";
@@ -115,7 +116,7 @@ export function CamerasView() {
   });
   const events = useQuery({
     queryKey: ["camera-events", 25],
-    queryFn: () => getJson<{ events: CameraEvent[] }>("/api/cameras/events?limit=25"),
+    queryFn: () => getJson<{ events: CameraEvent[]; feed_stopped: Stopped }>("/api/cameras/events?limit=25"),
     refetchInterval: 30_000,
   });
 
@@ -164,6 +165,7 @@ export function CamerasView() {
             <h2>Last 25 camera events</h2>
           </div>
           <div className="card">
+            <FeedStopped stopped={events.data.feed_stopped} text="Not receiving camera events" />
             <CameraEventTable events={events.data.events} />
           </div>
         </>

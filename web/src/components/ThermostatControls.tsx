@@ -32,16 +32,21 @@ function Controls({ t, onError }: { t: ThermostatState; onError: (text: string |
   const [target, setTarget] = useState<"heat" | "cool">("heat");
   const current = range ? (target === "heat" ? t.heat_f : t.cool_f) : t.setpoint_f;
   const [choice, setChoice] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Nest is recorded once a minute, so the card shows the old target for a while after a change.
+  const [sent, setSent] = useState<number | null>(null);
   const shown = choice ?? (current === null ? null : Math.round(current));
   if (shown === null) return null;
 
   const save = async () => {
+    setBusy(true);
     try {
       await send("POST", `/api/climate/${t.id}/setpoint`, {
         temp_f: shown,
         ...(range ? { target } : {}),
       });
       onError(null);
+      setSent(shown);
       setChoice(null);
       client.invalidateQueries({ queryKey: ["climate"] });
       client.invalidateQueries({ queryKey: ["climate-summary"] });
@@ -53,6 +58,8 @@ function Controls({ t, onError }: { t: ThermostatState; onError: (text: string |
           ? "Not changed. Enter the PIN again."
           : "Not changed. Check the thermostat's state and try again.",
       );
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -75,9 +82,14 @@ function Controls({ t, onError }: { t: ThermostatState; onError: (text: string |
         +
       </button>
       {choice !== null && choice !== Math.round(current ?? choice) ? (
-        <button type="button" onClick={save}>
+        <button type="button" onClick={save} disabled={busy}>
           Set to {shown}°
         </button>
+      ) : null}
+      {sent !== null && choice === null && sent !== Math.round(current ?? sent + 1) ? (
+        <span className="sub" role="status">
+          Sent {sent}°. The thermostat will show it within a minute.
+        </span>
       ) : null}
     </div>
   );

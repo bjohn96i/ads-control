@@ -350,3 +350,20 @@ def test_unrecognised_event_types_are_logged_by_name(caplog):
     }
     assert parse_events(message) == []
     assert "sdm.devices.events.CameraVehicle.Vehicle" in caplog.text
+
+
+async def test_recent_events_say_when_the_feed_has_stopped(
+    engine, session, clean, tmp_path, migrated_db
+):
+    from adscontrol.scheduler import SourceState
+
+    sdm = FakeSdm([])
+    await _ready(engine, sdm, tmp_path)
+    async with await _app_client(session, migrated_db, sdm, tmp_path, unlocked=False) as c:
+        assert (await c.get("/api/cameras/events")).json()["feed_stopped"] is None
+        last = datetime.now(timezone.utc) - timedelta(hours=2)
+        c._transport.app.state.source_states["camera_events"] = SourceState(
+            5, last_success=last, last_error="RefreshError: invalid_grant"
+        )
+        stopped = (await c.get("/api/cameras/events")).json()["feed_stopped"]
+    assert stopped["since"].startswith(last.isoformat()[:19])

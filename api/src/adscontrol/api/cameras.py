@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
+from adscontrol.api.health import stopped_since
 from adscontrol.api.maintenance import require_action
 from adscontrol.auth import require_pin
 from adscontrol.nest.sdm import NestError
@@ -75,7 +76,9 @@ async def recent_events(request: Request, limit: int = Query(25, ge=1, le=100)) 
             ),
             {"n": limit},
         )
-        return {"events": [dict(r._mapping) for r in rows]}
+        events = [dict(r._mapping) for r in rows]
+    # Without this, a stopped feed would read as a quiet house.
+    return {"events": events, "feed_stopped": stopped_since(request, "camera_events")}
 
 
 @router.post("/{camera_id}/live", dependencies=guarded)

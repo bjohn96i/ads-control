@@ -7,9 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
+from adscontrol.api.health import stopped_since
 from adscontrol.api.maintenance import require_action
 from adscontrol.auth import require_pin
 from adscontrol.climate import CoolingDay, c_to_f, cooling_estimate, f_to_c
+from adscontrol.detect.store import FULL_DAY_SAMPLES
 from adscontrol.energy import energy_by_zone
 from adscontrol.nest.sdm import NestError, RateLimited
 from adscontrol.nest.thermostat import list_paired
@@ -95,7 +97,8 @@ async def summary(request: Request) -> dict:
         "thermostats": [
             {"id": t.id, "name": t.name, "zone_name": t.zone_name, **_current(row, now)}
             for t, row in rows
-        ]
+        ],
+        "feed_stopped": stopped_since(request, "nest"),
     }
 
 
@@ -187,7 +190,9 @@ async def _estimate(session, thermostat, now: datetime) -> dict | None:
             ), power AS (
                 SELECT h.bucket AS day, sum(h.avg_w * h.samples) * z.multiplier * :per_kwh AS kwh
                 FROM zones z JOIN channel_daily h ON h.channel = ANY(z.channels)
-                WHERE z.id = :z AND h.bucket >= :since GROUP BY 1, z.multiplier
+                WHERE z.id = :z AND h.bucket >= :since GROUP BY 1, z.multiplier, z.channels
+                -- A part-recorded day would read as a low-use day and drag the fit down.
+                HAVING min(h.samples) >= :full_day AND count(*) = cardinality(z.channels)
             )
             SELECT d.day, p.kwh, o.temp_c, d.setpoint_c, d.cooling, d.heating
             FROM days d JOIN power p ON p.day = d.day LEFT JOIN outside o ON o.day = d.day
@@ -198,6 +203,7 @@ async def _estimate(session, thermostat, now: datetime) -> dict | None:
             "z": thermostat.zone_id,
             "since": since,
             "per_kwh": SAMPLE_INTERVAL_S / 3_600_000,
+            "full_day": FULL_DAY_SAMPLES,
         },
     )
     days = [
@@ -232,7 +238,11 @@ async def climate(request: Request, range: Range = "1d") -> dict:  # noqa: A002
                     "estimate": await _estimate(session, t, now),
                 }
             )
-    return {"thermostats": result, "rate_period": rate_period(now)}
+    return {
+        "thermostats": result,
+        "rate_period": rate_period(now),
+        "feed_stopped": stopped_since(request, "nest"),
+    }
 
 
 @router.post(

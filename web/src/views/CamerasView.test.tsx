@@ -32,7 +32,7 @@ class FakePeer {
 
 let posts: { url: string; method: string; body: any }[];
 
-function show({ unlocked = true, liveStatus = 200 } = {}) {
+function show({ unlocked = true, liveStatus = 200, feedStopped = null as object | null } = {}) {
   posts = [];
   vi.stubGlobal(
     "fetch",
@@ -45,7 +45,7 @@ function show({ unlocked = true, liveStatus = 200 } = {}) {
             { nickname: "Pool Turtle", name: "SR 154 at SR 12", view: 24030, image_url: "https://511ga.org/map/Cctv/24030", home: true },
             { nickname: "QT Exit 2", name: "I-285 CCW", view: 21551, image_url: "https://511ga.org/map/Cctv/21551", home: false },
           ] }));
-        if (url === "/api/cameras/events?limit=25") return new Response(JSON.stringify({ events: EVENTS }));
+        if (url === "/api/cameras/events?limit=25") return new Response(JSON.stringify({ events: EVENTS, feed_stopped: feedStopped }));
         return new Response(JSON.stringify({ cameras: CAMERAS }));
       }
       posts.push({ url, method, body: init?.body ? JSON.parse(init.body as string) : null });
@@ -188,5 +188,16 @@ describe("CamerasView", () => {
     expect(screen.getByRole("img", { name: /QT Exit 2/ })).toBeInTheDocument();
     const house = await screen.findByRole("heading", { name: "Backyard camera" });
     expect(turtle.compareDocumentPosition(house) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says when camera events have stopped arriving", async () => {
+    show({ feedStopped: { since: "2026-11-02T19:14:00Z" } });
+    expect(await screen.findByRole("status")).toHaveTextContent(/Not receiving camera events since .*:14/);
+  });
+
+  it("says nothing about the feed while it works", async () => {
+    show();
+    await screen.findByText("Last 25 camera events");
+    expect(screen.queryByText(/Not receiving/)).not.toBeInTheDocument();
   });
 });

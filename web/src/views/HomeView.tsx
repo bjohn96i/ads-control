@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { type CameraEvent, getJson, type Live, type TrafficCamera } from "../api/client";
 import { CameraEventList } from "../components/CameraEvents";
 import { AcCard, BillCard, MaintenanceCard, PowerCard } from "../components/HomeCards";
+import { FeedStopped, type Stopped } from "../components/FeedStopped";
 import { HouseScene } from "../components/HouseScene";
 import { NetworkPanel } from "../components/network/NetworkPanel";
 import { TrafficCams } from "../components/TrafficCams";
@@ -15,7 +16,7 @@ export function HomeView() {
   });
   const events = useQuery({
     queryKey: ["camera-events", 5],
-    queryFn: () => getJson<{ events: CameraEvent[] }>("/api/cameras/events?limit=5"),
+    queryFn: () => getJson<{ events: CameraEvent[]; feed_stopped: Stopped }>("/api/cameras/events?limit=5"),
     refetchInterval: 30_000,
   });
   const traffic = useQuery({
@@ -44,6 +45,7 @@ export function HomeView() {
                 <span>Camera events</span>
                 <span className="go">→</span>
               </div>
+              <FeedStopped stopped={events.data?.feed_stopped} text="Not receiving camera events" />
               {events.data ? <CameraEventList events={events.data.events} /> : null}
             </Link>
             <NetworkPanel />

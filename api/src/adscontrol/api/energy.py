@@ -1,6 +1,6 @@
 """Where the power goes: zones ranked by energy and estimated cost, and one zone's detail."""
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from statistics import median
 from typing import Literal
 
@@ -124,7 +124,8 @@ async def _detail(request: Request, range_: str, query: str, key: int | str) -> 
 
     by_hour = {h: sum(z[h] for z in hours) for h in hours[0] if all(h in z for z in hours)}
     series = []
-    hour = start
+    # Step in UTC: wall-clock steps from a local start skip or repeat an hour at DST changes.
+    hour = start.astimezone(timezone.utc)
     while hour < end:
         series.append({"time": hour, "watts": by_hour.get(hour)})
         hour += timedelta(hours=1)

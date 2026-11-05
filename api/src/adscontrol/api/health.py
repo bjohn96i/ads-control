@@ -21,3 +21,11 @@ async def health(request: Request) -> dict:
     }
     ok = database and all(s["healthy"] for s in sources.values())
     return {"status": "ok" if ok else "degraded", "database": database, "sources": sources}
+
+
+def stopped_since(request: Request, source: str) -> dict | None:
+    """A feed that is failing now, past one missed poll, with when it last worked (None: never)."""
+    state = request.app.state.source_states.get(source)
+    if state is None or state.last_error is None or state.healthy(datetime.now(timezone.utc)):
+        return None
+    return {"since": state.last_success}
