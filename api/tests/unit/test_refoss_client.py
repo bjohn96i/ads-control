@@ -178,3 +178,43 @@ def test_only_read_namespaces_can_be_requested():
     assert READ_NAMESPACES == ("Appliance.Control.ElectricityX", "Appliance.Control.ConsumptionH")
     with pytest.raises(ValueError):
         _client()._request("Appliance.Control.Bind", {})
+
+
+def _reply_with(channel: int, data: list) -> object:
+    def handler(request: httpx.Request) -> httpx.Response:
+        header = json.loads(request.content)["header"]
+        return httpx.Response(
+            200,
+            json={
+                "header": {"messageId": header["messageId"], "method": "GETACK"},
+                "payload": {"consumptionH": [{"channel": channel, "total": 0, "data": data}]},
+            },
+        )
+
+    return handler
+
+
+@respx.mock
+async def test_a_reply_for_another_channel_is_refused():
+    respx.post(URL).mock(side_effect=_reply_with(5, []))
+    with pytest.raises(RefossError):
+        await _client().read_hourly(17, now=NOW)
+
+
+@respx.mock
+async def test_empty_and_stale_slots_are_dropped():
+    good = int(datetime(2026, 11, 5, 3, 59, tzinfo=timezone.utc).timestamp())
+    stale = int(datetime(2026, 11, 2, 23, 59, tzinfo=timezone.utc).timestamp())  # 53 h before NOW
+    respx.post(URL).mock(
+        side_effect=_reply_with(
+            17,
+            [
+                {"timestamp": 0, "value": 9},
+                {"timestamp": stale, "value": 9},
+                {"timestamp": good, "value": 7},
+            ],
+        )
+    )
+    assert await _client().read_hourly(17, now=NOW) == [
+        (datetime(2026, 11, 5, 3, tzinfo=timezone.utc), 7)
+    ]

@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from adscontrol.counters import CounterEnergy, DeviceHistory
+from adscontrol.counters import CounterEnergy, DeviceHistory, counter_since
 
 pytestmark = pytest.mark.integration
 
@@ -43,14 +43,15 @@ async def test_first_run_backfills_from_the_earliest_reading(engine, session, cl
     rows = await _rows(session)
     assert rows[(START, 1)] == (359.0, "counter")  # the first reading has nothing before it
     assert rows[(START + timedelta(hours=1), 7)] == (360.0, "counter")
-    assert len([k for k in rows if k[1] == 1]) == 3
+    # The last hour is still in progress (no reading after it yet), so it isn't stored.
+    assert len([k for k in rows if k[1] == 1]) == 2
 
 
 async def test_rerunning_updates_rows_without_doubling(engine, session, clean):
     job = CounterEnergy(async_sessionmaker(engine))
     await _readings(session, START, minutes=30, wh_start=1000)
     await job.run()
-    await _readings(session, START + timedelta(minutes=30), minutes=30, wh_start=1180)
+    await _readings(session, START + timedelta(minutes=30), minutes=40, wh_start=1180)
     await job.run()
     assert (await _rows(session))[(START, 1)] == (359.0, "counter")
 
@@ -60,7 +61,7 @@ async def test_device_rows_are_left_alone(engine, session, clean):
         text("INSERT INTO channel_energy VALUES (:h, 1, 999, 'device')"), {"h": START}
     )
     await session.commit()
-    await _readings(session, START, minutes=60, wh_start=1000)
+    await _readings(session, START, minutes=70, wh_start=1000)
     await CounterEnergy(async_sessionmaker(engine)).run()
     assert (await _rows(session))[(START, 1)] == (999.0, "device")
 
@@ -103,3 +104,54 @@ async def test_device_values_are_stored_raw(engine, session, clean):
     """Channel 17 is the water heater, multiplier 2; storage stays raw like consume_wh."""
     await _device_job(engine, _History([(START, 339)])).run()
     assert (await _rows(session))[(START, 17)] == (339.0, "device")
+
+
+async def test_the_hour_still_in_progress_isnt_stored(engine, session, clean):
+    """If recording stops mid-hour, a stored partial hour would pass for a complete one."""
+    job = CounterEnergy(async_sessionmaker(engine))
+    await _readings(session, START, minutes=30, wh_start=1000)
+    await job.run()
+    assert (START, 1) not in await _rows(session)
+    await _readings(session, START + timedelta(hours=1), minutes=1, wh_start=1400)
+    await job.run()
+    assert (await _rows(session))[(START, 1)][0] > 0
+
+
+async def test_device_rows_ahead_dont_send_the_job_back_48_hours(session, clean):
+    """While recording is down the hourly history fills later hours; start from the latest row."""
+    await session.execute(
+        text("INSERT INTO channel_energy VALUES (:a, 1, 100, 'counter'), (:b, 1, 100, 'device')"),
+        {"a": START, "b": START + timedelta(hours=40)},
+    )
+    await session.commit()
+    assert await counter_since(session, 1) == START + timedelta(hours=40)
+
+
+async def test_with_no_counter_rows_the_job_backfills_from_the_first_reading(session, clean):
+    await session.execute(
+        text("INSERT INTO channel_energy VALUES (:b, 1, 100, 'device')"),
+        {"b": START + timedelta(hours=40)},
+    )
+    await session.commit()
+    await _readings(session, START, minutes=1, wh_start=1000)
+    assert await counter_since(session, 1) == START
+
+
+async def test_an_outage_longer_than_the_device_history_is_still_spread(engine, session, clean):
+    """Down for 100 h: the monitor's history covers only the last 48, the counter gap covers the
+    rest, and nothing already stored is touched."""
+    job = CounterEnergy(async_sessionmaker(engine))
+    await _readings(session, START, minutes=70, wh_start=1000)
+    await job.run()
+    for h in range(52, 100):
+        await session.execute(
+            text("INSERT INTO channel_energy VALUES (:h, 1, 50, 'device')"),
+            {"h": START + timedelta(hours=h)},
+        )
+    await session.commit()
+    await _readings(session, START + timedelta(hours=100), minutes=2, wh_start=11_000, channels=(1,))
+    await job.run()
+    rows = await _rows(session)
+    assert rows[(START + timedelta(hours=10), 1)][1] == "spread"
+    assert rows[(START + timedelta(hours=60), 1)] == (50.0, "device")
+    assert rows[(START, 1)] == (359.0, "counter")

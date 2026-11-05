@@ -10,7 +10,6 @@ import uvicorn
 import yaml
 from sqlalchemy import text
 
-from adscontrol.app import jobs_allowed  # noqa: F401 - re-exported for the CLI's users
 from adscontrol.auth import set_pin
 from adscontrol.config import get_settings
 from adscontrol.db.copy import copy_data
@@ -247,6 +246,7 @@ def copy_data_command(
     since: str | None = typer.Option(
         None, help="Only readings from this time on, ISO 8601 with a zone."
     ),
+    force: bool = typer.Option(False, help="Copy even if the target holds newer readings."),
 ) -> None:
     """Copy every table between databases, for a server move. URLs come from the environment.
 
@@ -260,7 +260,7 @@ def copy_data_command(
     if not source or not target:
         raise typer.BadParameter("set ADSCONTROL_SOURCE_URL and ADSCONTROL_TARGET_URL")
     start = parse_since(since) if since else None
-    for table, rows in asyncio.run(copy_data(source, target, start)).items():
+    for table, rows in asyncio.run(copy_data(source, target, start, force=force)).items():
         typer.echo(f"{table:22} {rows}")
 
 

@@ -25,12 +25,22 @@ TABLES = [
     "camera_events",
     "channel_readings",
 ]
+# Readings the final pass copies only from `since` on.
 TIME_COLUMN = {
     "channel_readings": "time",
     "thermostat_readings": "time",
     "outdoor_readings": "time",
-    "camera_events": "occurred_at",
 }
+# Tables the final pass only adds to, never deletes from. Camera events are copied whole: they're
+# stamped when they happened but stored when they arrived, so one can turn up late with an earlier
+# time (there are few of them).
+APPEND_ONLY = {*TIME_COLUMN, "camera_events"}
+
+
+class NewerTarget(Exception):
+    """The target holds newer readings than the source: a full copy would wipe them."""
+
+
 AGGREGATES = ["channel_hourly", "channel_daily"]
 
 
@@ -73,7 +83,9 @@ async def _stream(src, dst, table: str, columns: list[str], into: str, since) ->
     return rows
 
 
-async def copy_data(source_url: str, target_url: str, since: datetime | None) -> dict[str, int]:
+async def copy_data(
+    source_url: str, target_url: str, since: datetime | None, *, force: bool = False
+) -> dict[str, int]:
     """Full copy (since None) replaces the target's rows; with since, it merges the final rows.
 
     The final pass mirrors the small tables rather than emptying them (emptying cameras would
@@ -86,7 +98,18 @@ async def copy_data(source_url: str, target_url: str, since: datetime | None) ->
         await psycopg.AsyncConnection.connect(_conninfo(source_url)) as src,
         await psycopg.AsyncConnection.connect(_conninfo(target_url)) as dst,
     ):
+        # One snapshot of the source, so every table is read as of the same moment.
+        await src.set_isolation_level(psycopg.IsolationLevel.REPEATABLE_READ)
+        await src.set_read_only(True)
         if since is None:
+            newest = "SELECT max(time) FROM channel_readings"
+            source_newest = (await (await src.execute(newest)).fetchone())[0]
+            target_newest = (await (await dst.execute(newest)).fetchone())[0]
+            if not force and target_newest and (not source_newest or target_newest > source_newest):
+                raise NewerTarget(
+                    f"the target's newest reading ({target_newest}) is newer than the source's "
+                    f"({source_newest}); copying would wipe it. Check the direction, or use --force."
+                )
             await dst.execute(f"TRUNCATE {', '.join(TABLES)} CASCADE")
             for table in TABLES:
                 columns = await _columns(src, table)
@@ -101,7 +124,7 @@ async def copy_data(source_url: str, target_url: str, since: datetime | None) ->
                     src, dst, table, columns[table], f"stage_{table}", since
                 )
             for table in reversed(TABLES):
-                if table in TIME_COLUMN:
+                if table in APPEND_ONLY:
                     continue
                 match = " AND ".join(f"s.{k} = t.{k}" for k in keys[table])
                 await dst.execute(
@@ -110,7 +133,7 @@ async def copy_data(source_url: str, target_url: str, since: datetime | None) ->
                 )
             for table in TABLES:
                 cols, key = ", ".join(columns[table]), keys[table]
-                if table in TIME_COLUMN:
+                if table in APPEND_ONLY:
                     action = "DO NOTHING"
                 else:
                     updates = ", ".join(

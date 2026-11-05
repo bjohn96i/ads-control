@@ -28,3 +28,11 @@ def test_a_gap_is_spread_over_the_hours_it_spans():
 def test_a_reset_inside_a_gap_counts_only_what_came_after():
     points = [(H, 990_000), (H + timedelta(hours=2), 400)]
     assert sum(wh for wh, _ in hourly_from_counter(points).values()) == 400.0
+
+
+def test_a_bogus_low_reading_cant_put_a_month_into_one_hour():
+    """A transient 0 then back to the real total: the climb back is capped at what a circuit can
+    physically draw in that time (48 kW), not counted as a month of energy."""
+    points = [(H, 980_000), (H + timedelta(seconds=10), 0), (H + timedelta(seconds=20), 980_010)]
+    wh, _ = hourly_from_counter(points)[H]
+    assert wh <= 48_000 * 20 / 3600

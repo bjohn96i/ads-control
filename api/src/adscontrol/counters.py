@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 HOUR = timedelta(hours=1)
 DEVICE_HISTORY_INTERVAL_S = 3600  # the monitor keeps 48 hours, so hourly reads miss nothing
 COUNTER_ENERGY_INTERVAL_S = 60
+MAX_CHANNEL_W = 48_000  # 200 A at 240 V: more than any one circuit can draw
 GAP_S = 60  # readings come every 10 s; anything wider is a gap whose energy gets spread
 
 
@@ -53,6 +54,11 @@ def hourly_from_counter(
     for (t0, w0), (t1, w1) in pairwise(points):
         delta = w1 - w0 if w1 >= w0 else w1
         span = (t1 - t0).total_seconds()
+        # A bogus low reading would make the climb back look like a month of energy.
+        limit = span * MAX_CHANNEL_W / 3600
+        if delta > limit:
+            log.warning("counter jumped %s Wh in %.0f s; capped at %.0f Wh", delta, span, limit)
+            delta = limit
         if span <= gap_s:
             wh[_hour_of(t1)] += delta
             spread.setdefault(_hour_of(t1), False)
@@ -63,7 +69,10 @@ def hourly_from_counter(
     return {hour: (wh[hour], spread[hour]) for hour in wh}
 
 
-_LATEST = text("SELECT max(hour) FROM channel_energy WHERE channel = :c AND source <> 'device'")
+_ANY_COUNTED = text(
+    "SELECT 1 FROM channel_energy WHERE channel = :c AND source <> 'device' LIMIT 1"
+)
+_LATEST = text("SELECT max(hour) FROM channel_energy WHERE channel = :c")
 _EARLIEST = text("SELECT min(time) FROM channel_readings WHERE channel = :c")
 _BEFORE = text(
     "SELECT time, consume_wh FROM channel_readings WHERE channel = :c AND time < :s "
@@ -81,6 +90,15 @@ _UPSERT = text(
 )
 
 
+async def counter_since(session: AsyncSession, channel: int) -> datetime | None:
+    """Where the next run starts: the latest stored hour of any kind (so hours the monitor's history
+    filled during an outage aren't re-read every minute), or the first reading when nothing has
+    been counted yet (the backfill)."""
+    if await session.scalar(_ANY_COUNTED, {"c": channel}):
+        return await session.scalar(_LATEST, {"c": channel})
+    return await session.scalar(_EARLIEST, {"c": channel})
+
+
 class CounterEnergy:
     """Keeps channel_energy current from the readings; the first run backfills everything stored."""
 
@@ -90,9 +108,7 @@ class CounterEnergy:
     async def run(self) -> None:
         async with self._sessions() as session:
             for channel in range(1, CHANNEL_COUNT + 1):
-                since = await session.scalar(_LATEST, {"c": channel}) or await session.scalar(
-                    _EARLIEST, {"c": channel}
-                )
+                since = await counter_since(session, channel)
                 if since is None:
                     continue
                 since = _hour_of(since)
@@ -100,6 +116,9 @@ class CounterEnergy:
                 rows = (await session.execute(_SINCE, {"c": channel, "s": since})).all()
                 points = ([tuple(before)] if before else []) + [tuple(r) for r in rows]
                 hours = hourly_from_counter(points)
+                # The hour of the newest reading is still in progress; storing it would let a
+                # stop mid-hour pass for a complete hour. It's written once a later reading comes.
+                in_progress = _hour_of(points[-1][0]) if points else None
                 values = [
                     {
                         "hour": h,
@@ -108,10 +127,17 @@ class CounterEnergy:
                         "source": "spread" if s else "counter",
                     }
                     for h, (wh, s) in hours.items()
-                    if h >= since
+                    if h != in_progress
                 ]
-                if values:
-                    await session.execute(_UPSERT, values)
+                # From `since` on, rows are refreshed (device rows excepted). Earlier hours only
+                # come up when a gap reaches back past it, as an outage longer than the monitor's
+                # 48-hour history does: those are filled where nothing is stored, never changed.
+                current = [v for v in values if v["hour"] >= since]
+                missing = [v for v in values if v["hour"] < since]
+                if current:
+                    await session.execute(_UPSERT, current)
+                if missing:
+                    await session.execute(_INSERT_MISSING, missing)
             await session.commit()
 
 
@@ -119,6 +145,14 @@ _DEVICE_UPSERT = text(
     """
     INSERT INTO channel_energy (hour, channel, wh, source) VALUES (:hour, :channel, :wh, 'device')
     ON CONFLICT (hour, channel) DO UPDATE SET wh = EXCLUDED.wh, source = 'device'
+    """
+)
+
+
+_INSERT_MISSING = text(
+    """
+    INSERT INTO channel_energy (hour, channel, wh, source) VALUES (:hour, :channel, :wh, :source)
+    ON CONFLICT (hour, channel) DO NOTHING
     """
 )
 

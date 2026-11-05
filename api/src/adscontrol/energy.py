@@ -96,7 +96,7 @@ async def energy_by_zone(session: AsyncSession, start: datetime, end: datetime) 
     for (hour, channel), wh in counted.items():
         add(hour, channel, wh / 1000, SAMPLES_PER_HOUR)  # a counter hour is a fully covered hour
 
-    expected = (end - start).total_seconds() / SAMPLE_INTERVAL_S
+    expected = max((end - start).total_seconds() / SAMPLE_INTERVAL_S, 1)  # an empty range is 0%
     return [
         ZoneEnergy(
             zone_id=zone.id,
@@ -169,14 +169,14 @@ async def manual_days(session: AsyncSession, start: date, end: date) -> dict[dat
             SELECT day, kwh FROM manual_daily_energy m
             WHERE day BETWEEN :start AND :end
               AND NOT EXISTS (SELECT 1 FROM channel_energy e WHERE e.channel = ANY(:ch)
-                  AND (e.hour AT TIME ZONE 'America/New_York')::date = m.day)
+                  AND (e.hour AT TIME ZONE :tz)::date = m.day)
               AND NOT EXISTS (SELECT 1 FROM channel_hourly h WHERE h.channel = ANY(:ch)
-                  AND h.bucket >= m.day::timestamp AT TIME ZONE 'America/New_York'
-                  AND h.bucket < (m.day + 1)::timestamp AT TIME ZONE 'America/New_York')
+                  AND h.bucket >= m.day::timestamp AT TIME ZONE :tz
+                  AND h.bucket < (m.day + 1)::timestamp AT TIME ZONE :tz)
             ORDER BY day
             """
         ),
-        {"start": start, "end": end, "ch": channels or []},
+        {"start": start, "end": end, "ch": channels or [], "tz": LOCAL.key},
     )
     return {r.day: r.kwh for r in rows}
 

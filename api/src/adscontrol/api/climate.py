@@ -11,12 +11,10 @@ from adscontrol.api.health import stopped_since
 from adscontrol.api.maintenance import require_action
 from adscontrol.auth import require_pin
 from adscontrol.climate import CoolingDay, c_to_f, cooling_estimate, f_to_c
-from adscontrol.detect.store import FULL_DAY_SAMPLES
 from adscontrol.energy import energy_by_zone
 from adscontrol.nest.sdm import NestError, RateLimited
 from adscontrol.nest.thermostat import list_paired
 from adscontrol.rates import LOCAL, rate_period
-from adscontrol.refoss.recorder import SAMPLE_INTERVAL_S
 
 STALE_AFTER = timedelta(minutes=5)
 ON_PEAK_FLAG_W = 500.0
@@ -188,11 +186,13 @@ async def _estimate(session, thermostat, now: datetime) -> dict | None:
                 SELECT time_bucket('1 day', time, 'America/New_York') AS day, avg(temp_c) AS temp_c
                 FROM outdoor_readings WHERE time >= :since GROUP BY 1
             ), power AS (
-                SELECT h.bucket AS day, sum(h.avg_w * h.samples) * z.multiplier * :per_kwh AS kwh
-                FROM zones z JOIN channel_daily h ON h.channel = ANY(z.channels)
-                WHERE z.id = :z AND h.bucket >= :since GROUP BY 1, z.multiplier, z.channels
-                -- A part-recorded day would read as a low-use day and drag the fit down.
-                HAVING min(h.samples) >= :full_day AND count(*) = cardinality(z.channels)
+                SELECT time_bucket('1 day', e.hour, 'America/New_York') AS day,
+                       sum(e.wh) * z.multiplier / 1000 AS kwh
+                FROM zones z JOIN channel_energy e ON e.channel = ANY(z.channels)
+                WHERE z.id = :z AND e.hour >= :since GROUP BY 1, z.multiplier, z.channels
+                -- Counter hours only for whole days (23 or 25 hours at the clock changes): a day
+                -- with hours missing would read as a low-use day and drag the fit down.
+                HAVING count(*) >= 23 * cardinality(z.channels)
             )
             SELECT d.day, p.kwh, o.temp_c, d.setpoint_c, d.cooling, d.heating
             FROM days d JOIN power p ON p.day = d.day LEFT JOIN outside o ON o.day = d.day
@@ -202,8 +202,6 @@ async def _estimate(session, thermostat, now: datetime) -> dict | None:
             "i": thermostat.id,
             "z": thermostat.zone_id,
             "since": since,
-            "per_kwh": SAMPLE_INTERVAL_S / 3_600_000,
-            "full_day": FULL_DAY_SAMPLES,
         },
     )
     days = [

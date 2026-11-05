@@ -1,4 +1,4 @@
-from adscontrol.cli import jobs_allowed
+from adscontrol.app import jobs_allowed
 from adscontrol.config import Settings
 
 

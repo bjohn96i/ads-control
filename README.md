@@ -140,8 +140,9 @@ a LAN broadcast) and an external Postgres/TimescaleDB server. Both images are bu
 
 The recorder only captures while the server runs, so a gap is permanent. While a file named `hold`
 exists in the data volume the recorder jobs stay off, which lets a new deployment wait for a
-cutover. The monitor's id is remembered in `refoss_uuid` after the first discovery; delete that file
-if the monitor is ever replaced.
+cutover. It is read only at startup, so restart the container after removing it; while held,
+`/api/health` reports `degraded` because no job has run. The monitor's id is remembered in
+`refoss_uuid` after the first discovery; delete that file if the monitor is ever replaced.
 
 **Moving to a new database server.** `adscontrol copy-data` copies every table, reading
 `ADSCONTROL_SOURCE_URL` and `ADSCONTROL_TARGET_URL` from the environment (never the command line).

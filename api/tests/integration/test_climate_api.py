@@ -293,8 +293,14 @@ async def test_estimate_leaves_out_part_recorded_days(session, migrated_db, seed
     monkeypatch.setattr(climate_api, "cooling_estimate", lambda days, **_: seen.extend(days))
     full = datetime(2026, 10, 13, 4, 0, tzinfo=timezone.utc)  # midnight Eastern
     half = full + timedelta(days=1)
-    await _ac(session, full, full + timedelta(days=1), 1000.0)
-    await _ac(session, half, half + timedelta(hours=12), 1000.0)  # the Mac slept the rest
+    await session.execute(text("TRUNCATE channel_energy"))
+    # Daily kWh comes from the monitor's counter hours: a whole day, and a day with half its hours.
+    for start, hours in ((full, 24), (half, 12)):
+        for h in range(hours):
+            await session.execute(
+                text("INSERT INTO channel_energy VALUES (:h, 18, 1000, 'counter')"),
+                {"h": start + timedelta(hours=h)},
+            )
     for day in (full, half):
         await _reading(session, seeded, day + timedelta(hours=15))
         await session.execute(

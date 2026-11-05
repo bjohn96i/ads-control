@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from adscontrol.db.copy import copy_data
+from adscontrol.db.copy import NewerTarget, copy_data
 from adscontrol.db.migrate import upgrade_head
 
 pytestmark = pytest.mark.integration
@@ -132,6 +132,8 @@ async def test_final_pass_adds_only_new_readings_once(source, target):
 async def test_new_rows_after_the_copy_do_not_collide(source, target):
     await copy_data(source.url, target.url, since=None)
     await target.execute("INSERT INTO tasks (name, category) VALUES ('New', 'House')")
+    # The copied task is id 5; an unmoved sequence would have handed out 1.
+    assert await target.scalar("SELECT id FROM tasks WHERE name = 'New'") > 5
     await target.execute(
         "INSERT INTO cameras (device_id, name, kind) VALUES ('d2', 'Front', 'camera')"
     )
@@ -154,3 +156,24 @@ async def test_final_pass_mirrors_a_completion_undone_and_redone(source, target)
     assert await target.scalar("SELECT array_agg(id) FROM completions") == await source.scalar(
         "SELECT array_agg(id) FROM completions"
     )
+
+
+async def test_a_late_camera_event_is_still_carried_over(source, target):
+    """Events are stored when they arrive, stamped when they happened; the final pass mustn't
+    skip one that arrived late with an earlier timestamp."""
+    await copy_data(source.url, target.url, since=None)
+    await source.execute(
+        "INSERT INTO camera_events (camera_id, type, occurred_at, event_id) "
+        "SELECT id, 'person', :t, 'late' FROM cameras",
+        t=START - timedelta(hours=1),
+    )
+    await copy_data(source.url, target.url, since=START + timedelta(hours=2))
+    assert await target.scalar("SELECT count(*) FROM camera_events WHERE event_id = 'late'") == 1
+
+
+async def test_a_full_copy_wont_overwrite_a_newer_database(source, target):
+    """Run the wrong way round (or again after cutover), it would wipe newer readings."""
+    await target.add_readings(after=START + timedelta(days=1), minutes=1)
+    with pytest.raises(NewerTarget):
+        await copy_data(source.url, target.url, since=None)
+    await copy_data(source.url, target.url, since=None, force=True)

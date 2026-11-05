@@ -12,12 +12,13 @@ import socket
 import string
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
 CHANNEL_COUNT = 18
 DISCOVERY_MESSAGE = json.dumps({"id": "48cbd88f969eb3c486085cfe7b5eb1e4", "devName": "*"}).encode()
+HISTORY_WINDOW = timedelta(hours=49)  # the monitor keeps 48 hourly slots, plus the current one
 READ_NAMESPACES = ("Appliance.Control.ElectricityX", "Appliance.Control.ConsumptionH")
 DISCOVERY_SEND_PORT = 9988
 DISCOVERY_LISTEN_PORT = 9989
@@ -151,7 +152,10 @@ class RefossClient:
             payload = await self._get(
                 "Appliance.Control.ConsumptionH", {"consumptionH": [{"channel": channel}]}
             )
-            entries = payload["consumptionH"][0]["data"]
+            entry = payload["consumptionH"][0]
+            if entry["channel"] != channel:
+                raise RefossError(f"asked for channel {channel}, got {entry['channel']}")
+            entries = entry["data"]
             hours = {
                 datetime.fromtimestamp(e["timestamp"], timezone.utc).replace(
                     minute=0, second=0, microsecond=0
@@ -160,4 +164,6 @@ class RefossClient:
             }
         except (httpx.HTTPError, ValueError, KeyError, TypeError, IndexError) as exc:
             raise RefossError(f"bad reply: {type(exc).__name__}: {exc}") from exc
-        return sorted((h, wh) for h, wh in hours.items() if h < current)
+        # Empty slots (timestamp 0) and anything older than the monitor's 48 hours are leftovers.
+        oldest = current - HISTORY_WINDOW
+        return sorted((h, wh) for h, wh in hours.items() if oldest <= h < current)

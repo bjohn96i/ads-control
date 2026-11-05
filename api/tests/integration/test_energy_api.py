@@ -297,3 +297,8 @@ async def test_a_partly_covered_hand_entered_day_counts_its_share(api, session, 
     await session.commit()
     body = (await api.get("/api/energy/ranking?range=7d")).json()
     assert body["manual_kwh"] == pytest.approx(10.0)
+
+
+async def test_an_empty_range_has_no_energy_and_no_division_by_zero(session):
+    zones = await energy_by_zone(session, NOW, NOW)
+    assert all(z.kwh == 0 and z.coverage == 0 for z in zones)
