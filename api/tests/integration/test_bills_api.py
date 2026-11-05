@@ -197,3 +197,11 @@ async def test_an_oversized_upload_is_refused_without_reading_it_all(api):
     r = await api.post("/api/bills/parse", content=chunks(), headers=HEADERS)
     assert r.status_code == 413
     assert sent * 1_000_000 <= MAX_UPLOAD_BYTES + 2_000_000
+
+
+async def test_current_bill_route_projects_from_the_latest_bill(api):
+    assert (await api.get("/api/bills/current")).json() is None
+    await api.post("/api/bills", json=BILL, headers=HEADERS)
+    body = (await api.get("/api/bills/current")).json()
+    assert body["period_start"] == "2026-10-24"
+    assert {"projected_cost", "last_charge", "verdict", "day", "days", "kwh_so_far"} <= set(body)

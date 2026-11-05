@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from adscontrol.api.maintenance import require_action
+from adscontrol.billing import current_bill
 from adscontrol.bills.parse import parse_bill
 from adscontrol.energy import energy_by_zone
 from adscontrol.rates import LOCAL
@@ -79,6 +80,13 @@ async def latest(request: Request) -> dict | None:
     async with request.app.state.sessions() as session:
         bills = await _all(session)
     return bills[0] if bills else None
+
+
+@router.get("/current")
+async def current(request: Request) -> dict | None:
+    """The current bill so far and projected, against the last one; null with no bill on file."""
+    async with request.app.state.sessions() as session:
+        return await current_bill(session, request.app.state.clock())
 
 
 @router.get("/export")
