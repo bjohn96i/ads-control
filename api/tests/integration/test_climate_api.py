@@ -276,12 +276,10 @@ async def test_weather_poll_stores_and_sends_only_rounded_location(session, migr
                 200, json={"current": {"temperature_2m": 12.5, "weather_code": 61, "is_day": 0}}
             )
         )
-        await WeatherRecorder(
-            33.749, -84.388, async_sessionmaker(engine), clock=lambda: OCT
-        ).poll()
+        await WeatherRecorder(33.749, -84.388, async_sessionmaker(engine), clock=lambda: OCT).poll()
     await engine.dispose()
-    assert route.calls[0].request.url.params["latitude"] == "33.8"
-    assert route.calls[0].request.url.params["longitude"] == "-84.3"
+    assert route.calls[0].request.url.params["latitude"] == "33.7"
+    assert route.calls[0].request.url.params["longitude"] == "-84.4"
     assert await session.scalar(text("SELECT temp_c FROM outdoor_readings")) == 12.5
     assert route.calls[0].request.url.params["current"] == "temperature_2m,weather_code,is_day"
     row = (await session.execute(text("SELECT weather_code, is_day FROM outdoor_readings"))).one()
