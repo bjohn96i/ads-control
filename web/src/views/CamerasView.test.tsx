@@ -6,7 +6,7 @@ import { CamerasView, LIVE_LIMIT_MS } from "./CamerasView";
 
 const CAMERAS = [
   { id: 7, name: "Backyard camera", kind: "camera", last_event: "motion", last_event_at: "2026-11-02T19:14:00Z" },
-  { id: 8, name: "Living Room Display", kind: "display", last_event: null, last_event_at: null },
+  { id: 8, name: "Back door camera", kind: "camera", last_event: null, last_event_at: null },
 ];
 
 const EVENTS = [
@@ -156,7 +156,7 @@ describe("CamerasView", () => {
 
   it("unavailable_camera_explains_and_closes", async () => {
     show({ liveStatus: 409 });
-    const c = await card("Living Room Display");
+    const c = await card("Back door camera");
     fireEvent.click(await c.findByRole("button", { name: /watch live/i }));
     expect(await c.findByRole("alert")).toHaveTextContent(/isn.t available/i);
     expect(FakePeer.made[0].closed).toBe(true);

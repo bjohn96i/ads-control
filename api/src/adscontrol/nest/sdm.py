@@ -21,10 +21,10 @@ REDIRECT_URI = "https://www.google.com"
 # Pub/Sub is how camera events reach the app.
 SCOPE = "https://www.googleapis.com/auth/sdm.service https://www.googleapis.com/auth/pubsub"
 PUBSUB_URL = "https://pubsub.googleapis.com/v1"
+# Displays (the indoor Hub Max) are left out on purpose: this app is for the house, not inside it.
 CAMERA_TYPES = {
     "sdm.devices.types.CAMERA": "camera",
     "sdm.devices.types.DOORBELL": "doorbell",
-    "sdm.devices.types.DISPLAY": "display",
 }
 STREAM = "sdm.devices.commands.CameraLiveStream."
 THERMOSTAT_TYPE = "sdm.devices.types.THERMOSTAT"

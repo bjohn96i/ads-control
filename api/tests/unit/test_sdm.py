@@ -302,7 +302,8 @@ NO_CAMERA_DISPLAY = {
 
 
 @respx.mock
-async def test_lists_cameras_with_their_kind(tmp_path):
+async def test_lists_cameras_with_their_kind_leaving_out_the_indoor_hub(tmp_path):
+    """The Hub Max is indoors and usually off when people are home, so it is not a camera here."""
     _token()
     respx.get(f"{BASE}/devices").mock(
         return_value=httpx.Response(
@@ -312,7 +313,6 @@ async def test_lists_cameras_with_their_kind(tmp_path):
     cameras = await _client(tmp_path).list_cameras()
     assert [(c.device_id, c.name, c.kind) for c in cameras] == [
         ("door1", "Entryway doorbell", "doorbell"),
-        ("hub1", "Living Room", "display"),
     ]
 
 
