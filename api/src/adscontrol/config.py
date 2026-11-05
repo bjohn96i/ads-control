@@ -14,6 +14,8 @@ class Settings(BaseSettings):
         env_file=(ROOT_DIR / ".env", ROOT_DIR / "api" / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        # Compose passes an unset ${VAR} as "", which would crash a list or number setting.
+        env_ignore_empty=True,
     )
 
     database_url: str = "postgresql+psycopg://adscontrol:adscontrol@localhost:5432/adscontrol"

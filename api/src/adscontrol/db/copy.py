@@ -76,8 +76,10 @@ async def _stream(src, dst, table: str, columns: list[str], into: str, since) ->
 async def copy_data(source_url: str, target_url: str, since: datetime | None) -> dict[str, int]:
     """Full copy (since None) replaces the target's rows; with since, it merges the final rows.
 
-    The final pass upserts the small tables rather than emptying them: emptying cameras would
-    cascade into camera_events and erase history older than since.
+    The final pass mirrors the small tables rather than emptying them (emptying cameras would
+    cascade into camera_events and erase history older than since): rows the source no longer has
+    are removed first, children before parents, so a row deleted and re-added between passes
+    can't trip a unique rule such as completions_once; then the rest is merged in.
     """
     counts: dict[str, int] = {}
     async with (
@@ -86,25 +88,39 @@ async def copy_data(source_url: str, target_url: str, since: datetime | None) ->
     ):
         if since is None:
             await dst.execute(f"TRUNCATE {', '.join(TABLES)} CASCADE")
-        for table in TABLES:
-            columns = await _columns(src, table)
-            if since is None:
+            for table in TABLES:
+                columns = await _columns(src, table)
                 counts[table] = await _stream(src, dst, table, columns, table, None)
-                continue
-            await dst.execute(f"CREATE TEMP TABLE stage (LIKE {table}) ON COMMIT DROP")
-            counts[table] = await _stream(src, dst, table, columns, "stage", since)
-            cols = ", ".join(columns)
-            key = await _primary_key(dst, table)
-            if table in TIME_COLUMN:
-                action = "DO NOTHING"
-            else:
-                updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in columns if c not in key)
-                action = f"DO UPDATE SET {updates}" if updates else "DO NOTHING"
-            await dst.execute(
-                f"INSERT INTO {table} ({cols}) SELECT {cols} FROM stage "
-                f"ON CONFLICT ({', '.join(key)}) {action}"
-            )
-            await dst.execute("DROP TABLE stage")
+        else:
+            columns, keys = {}, {}
+            for table in TABLES:
+                columns[table] = await _columns(src, table)
+                keys[table] = await _primary_key(dst, table)
+                await dst.execute(f"CREATE TEMP TABLE stage_{table} (LIKE {table}) ON COMMIT DROP")
+                counts[table] = await _stream(
+                    src, dst, table, columns[table], f"stage_{table}", since
+                )
+            for table in reversed(TABLES):
+                if table in TIME_COLUMN:
+                    continue
+                match = " AND ".join(f"s.{k} = t.{k}" for k in keys[table])
+                await dst.execute(
+                    f"DELETE FROM {table} t "
+                    f"WHERE NOT EXISTS (SELECT 1 FROM stage_{table} s WHERE {match})"
+                )
+            for table in TABLES:
+                cols, key = ", ".join(columns[table]), keys[table]
+                if table in TIME_COLUMN:
+                    action = "DO NOTHING"
+                else:
+                    updates = ", ".join(
+                        f"{c} = EXCLUDED.{c}" for c in columns[table] if c not in key
+                    )
+                    action = f"DO UPDATE SET {updates}" if updates else "DO NOTHING"
+                await dst.execute(
+                    f"INSERT INTO {table} ({cols}) SELECT {cols} FROM stage_{table} "
+                    f"ON CONFLICT ({', '.join(key)}) {action}"
+                )
         # Copied ids came with their values; move each sequence past them.
         sequences = await dst.execute(
             "SELECT s.relname, t.relname, a.attname FROM pg_class s "

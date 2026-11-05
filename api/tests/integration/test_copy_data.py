@@ -141,3 +141,16 @@ async def test_charts_cover_the_copied_history(source, target):
     await copy_data(source.url, target.url, since=None)
     assert await _count(target, "channel_hourly") > 0
     assert await _count(target, "channel_daily") > 0
+
+
+async def test_final_pass_mirrors_a_completion_undone_and_redone(source, target):
+    """Unticking and re-ticking a task between passes deletes one row and adds another for the
+    same day; the final pass must carry the delete too, or the add breaks completions_once."""
+    await copy_data(source.url, target.url, since=None)
+    await source.execute("DELETE FROM completions WHERE task_id = 5")
+    await source.execute("INSERT INTO completions (task_id, done_on) VALUES (5, '2026-11-01')")
+    cut = await source.scalar("SELECT max(time) FROM channel_readings")
+    await copy_data(source.url, target.url, since=cut)
+    assert await target.scalar("SELECT array_agg(id) FROM completions") == await source.scalar(
+        "SELECT array_agg(id) FROM completions"
+    )

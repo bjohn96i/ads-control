@@ -94,3 +94,19 @@ async def test_uuid_is_kept_between_good_polls(engine):
     await recorder.poll()
     await recorder.poll()
     assert discovered == ["host"]
+
+
+async def test_an_empty_uuid_file_is_ignored(engine, tmp_path):
+    (tmp_path / "refoss_uuid").write_text("")
+    discovered: list[str] = []
+    used: list[str] = []
+    await _recorder(engine, _Client(_readings()), discovered, tmp_path / "refoss_uuid", used).poll()
+    assert discovered == ["host"]
+    assert used == ["uuid"]
+
+
+async def test_an_unwritable_uuid_file_does_not_stop_recording(engine, session, tmp_path):
+    """A gap in the recording is permanent; failing to remember the id must not cause one."""
+    path = tmp_path / "no-such-dir" / "refoss_uuid"
+    await _recorder(engine, _Client(_readings()), uuid_path=path).poll()
+    assert await _count(session) == 18

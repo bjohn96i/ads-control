@@ -1,5 +1,6 @@
 """Polls the monitor and stores one row per channel. A failed poll stores nothing."""
 
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -18,6 +19,8 @@ _INSERT = text(
     VALUES (:time, :channel, :power_w, :voltage_v, :current_a, :power_factor, :consume_wh)
     """
 )
+
+log = logging.getLogger(__name__)
 
 
 class Recorder:
@@ -41,11 +44,17 @@ class Recorder:
         # Discovery is a broadcast the monitor's Wi-Fi often misses while idle; reads are unicast.
         # The uuid never changes, so it is found once and remembered (delete the file if the
         # monitor is ever replaced).
+        remembered = ""
         if self._uuid_path is not None and self._uuid_path.exists():
-            return self._uuid_path.read_text().strip()
+            remembered = self._uuid_path.read_text().strip()
+        if remembered:
+            return remembered
         uuid = await self._discover(self._host)
         if self._uuid_path is not None:
-            self._uuid_path.write_text(uuid + "\n")
+            try:
+                self._uuid_path.write_text(uuid + "\n")
+            except OSError as exc:  # remembering is a convenience; a gap in the recording is not
+                log.warning("could not remember the monitor id in %s: %s", self._uuid_path, exc)
         return uuid
 
     async def poll(self) -> None:
