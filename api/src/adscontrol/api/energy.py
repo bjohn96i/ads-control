@@ -8,8 +8,8 @@ from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import text
 
 from adscontrol.detect.store import open_findings
-from adscontrol.energy import charger_estimate, energy_by_zone
-from adscontrol.rates import LOCAL
+from adscontrol.energy import charger_estimate, energy_by_zone, manual_days
+from adscontrol.rates import LOCAL, all_in_cents, list_rates, version_in_force
 
 router = APIRouter(prefix="/api/energy")
 Range = Literal["bill", "7d", "30d"]
@@ -45,6 +45,10 @@ async def ranking(request: Request, range: Range = "bill") -> dict:  # noqa: A00
         start, end, since_bill = await _span(request, session, range)
         energy = await energy_by_zone(session, start, end)
         charger_kwh, charger_cost = await charger_estimate(session, start, end)
+        manual = await manual_days(
+            session, start.astimezone(LOCAL).date(), end.astimezone(LOCAL).date()
+        )
+        rates = await list_rates(session)
         zones = {
             r.id: r for r in (await session.execute(text("SELECT id, kind, room FROM zones"))).all()
         }
@@ -75,9 +79,28 @@ async def ranking(request: Request, range: Range = "bill") -> dict:  # noqa: A00
         ),
         "whole_house": {
             "id": whole.zone_id,
-            **_line(whole.kwh, whole.est_cost, whole.coverage, whole.kwh),
+            **_whole_with_manual(whole, manual, rates, start, end),
         },
+        "manual_kwh": sum(manual.values()),
+        "manual_days": len(manual),
     }
+
+
+def _whole_with_manual(whole, manual: dict, rates, start: datetime, end: datetime) -> dict:
+    """The whole-house line, plus hand-entered days. Circuits, shares and unmetered stay on
+    measured time only, so whole-house-only days don't swell "unmetered"."""
+    if not manual:
+        return _line(whole.kwh, whole.est_cost, whole.coverage, whole.kwh)
+    manual_kwh = sum(manual.values())
+    if whole.kwh > 0:
+        cents = whole.est_cost / whole.kwh * 100
+    else:  # nothing measured yet: an even day/night mix at today's prices
+        rate = version_in_force(rates, start.astimezone(LOCAL).date())
+        cents = (all_in_cents(rate, "off_peak") + all_in_cents(rate, "super_off_peak")) / 2
+    expected_days = max((end - start).total_seconds() / 86400, 1)
+    kwh = whole.kwh + manual_kwh
+    coverage = min(1.0, whole.coverage + len(manual) / expected_days)
+    return _line(kwh, whole.est_cost + manual_kwh * cents / 100, coverage, kwh)
 
 
 _ZONES = "SELECT id, name, channels, multiplier FROM zones WHERE "

@@ -16,6 +16,7 @@ from adscontrol.config import get_settings
 from adscontrol.db.copy import copy_data
 from adscontrol.db.engine import create_engine, make_session_factory
 from adscontrol.db.migrate import upgrade_head
+from adscontrol.energy import add_manual_day
 from adscontrol.maintenance.repo import import_tasks
 from adscontrol.nest.sdm import (
     NestError,
@@ -86,6 +87,29 @@ def zone_set(
 
     if asyncio.run(run()) == 0:
         raise typer.BadParameter(f"no zone named {name!r}")
+
+
+energy = typer.Typer(no_args_is_help=True, help="Energy records.")
+app.add_typer(energy, name="energy")
+
+
+@energy.command("add-day")
+def energy_add_day(
+    day: datetime = typer.Argument(..., formats=["%Y-%m-%d"], help="The day, YYYY-MM-DD."),
+    kwh: float = typer.Argument(..., min=0, help="Whole-house kWh for that day."),
+    source: str = typer.Option("Refoss app", help="Where the number came from."),
+) -> None:
+    """Record a whole-house daily total from before recording began. Entering it again replaces it."""
+
+    async def run() -> None:
+        engine = create_engine(get_settings().database_url)
+        async with make_session_factory(engine)() as session:
+            await add_manual_day(session, day.date(), kwh, source)
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(run())
+    typer.echo(f"{day.date()}: {kwh} kWh ({source})")
 
 
 maintenance = typer.Typer(no_args_is_help=True, help="The maintenance list.")

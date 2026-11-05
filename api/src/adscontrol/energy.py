@@ -1,8 +1,12 @@
-"""Energy per zone from recorded power, with coverage so gaps never read as low usage."""
+"""Energy per zone, with coverage so gaps never read as low usage.
+
+Each channel-hour uses the monitor's counter energy (channel_energy) when there is a row for it,
+which is exact even across recording gaps, and otherwise the 10-second power samples.
+"""
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +29,17 @@ _HOURLY = text(
     WHERE bucket >= :start AND bucket < :end
     """
 )
+
+
+# Only hours wholly inside the range: a partial hour at either end (the current one, say) keeps
+# using its samples, which are fresher than the counter job's last run.
+_COUNTER = text(
+    """
+    SELECT hour, channel, wh FROM channel_energy
+    WHERE hour >= :start AND hour + INTERVAL '1 hour' <= :end
+    """
+)
+SAMPLES_PER_HOUR = 3600 / SAMPLE_INTERVAL_S
 
 
 @dataclass(frozen=True)
@@ -52,19 +67,34 @@ async def energy_by_zone(session: AsyncSession, start: datetime, end: datetime) 
     cost: dict[int, float] = defaultdict(float)
     query = _RAW if end - start <= RAW_RANGE_LIMIT else _HOURLY
     rows = (await session.execute(query, {"start": start, "end": end})).all()
+    counted = {
+        (r.hour, r.channel): r.wh
+        for r in await session.execute(_COUNTER, {"start": start, "end": end})
+    }
 
     kwh: dict[int, float] = defaultdict(float)
-    samples: dict[int, int] = defaultdict(int)
+    samples: dict[int, float] = defaultdict(float)
     # Hour buckets are safe here: every period boundary falls on a whole local hour.
     by_period: dict[int, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+
+    def add(hour: datetime, channel: int, row_kwh: float, row_samples: float) -> None:
+        kwh[channel] += row_kwh
+        samples[channel] += row_samples
+        period = rate_period(hour)
+        by_period[channel][period] += row_kwh
+        rate = version_in_force(rates, hour.astimezone(LOCAL).date())
+        cost[channel] += row_kwh * all_in_cents(rate, period) / 100
+
     for row in rows:
-        row_kwh = row.avg_w * row.samples * SAMPLE_INTERVAL_S / 3_600_000
-        kwh[row.channel] += row_kwh
-        samples[row.channel] += row.samples
-        period = rate_period(row.bucket)
-        by_period[row.channel][period] += row_kwh
-        rate = version_in_force(rates, row.bucket.astimezone(LOCAL).date())
-        cost[row.channel] += row_kwh * all_in_cents(rate, period) / 100
+        if (row.bucket, row.channel) not in counted:
+            add(
+                row.bucket,
+                row.channel,
+                row.avg_w * row.samples * SAMPLE_INTERVAL_S / 3_600_000,
+                row.samples,
+            )
+    for (hour, channel), wh in counted.items():
+        add(hour, channel, wh / 1000, SAMPLES_PER_HOUR)  # a counter hour is a fully covered hour
 
     expected = (end - start).total_seconds() / SAMPLE_INTERVAL_S
     return [
@@ -114,3 +144,38 @@ async def charger_estimate(
         kwh += bucket_kwh
         cost += bucket_kwh * all_in_cents(rate, rate_period(row.bucket)) / 100
     return kwh, cost
+
+
+async def add_manual_day(
+    session: AsyncSession, day: date, kwh: float, source: str = "Refoss app"
+) -> None:
+    """A whole-house daily total from before recording began; entering a day again replaces it."""
+    await session.execute(
+        text(
+            "INSERT INTO manual_daily_energy (day, kwh, source) VALUES (:d, :k, :s) "
+            "ON CONFLICT (day) DO UPDATE SET kwh = EXCLUDED.kwh, source = EXCLUDED.source"
+        ),
+        {"d": day, "k": kwh, "s": source},
+    )
+
+
+async def manual_days(session: AsyncSession, start: date, end: date) -> dict[date, float]:
+    """Hand-entered whole-house days from start to end inclusive, leaving out any day that has
+    whole-house energy data of its own (measured beats remembered)."""
+    channels = await session.scalar(text("SELECT channels FROM zones WHERE kind = 'incoming'"))
+    rows = await session.execute(
+        text(
+            """
+            SELECT day, kwh FROM manual_daily_energy m
+            WHERE day BETWEEN :start AND :end
+              AND NOT EXISTS (SELECT 1 FROM channel_energy e WHERE e.channel = ANY(:ch)
+                  AND (e.hour AT TIME ZONE 'America/New_York')::date = m.day)
+              AND NOT EXISTS (SELECT 1 FROM channel_hourly h WHERE h.channel = ANY(:ch)
+                  AND h.bucket >= m.day::timestamp AT TIME ZONE 'America/New_York'
+                  AND h.bucket < (m.day + 1)::timestamp AT TIME ZONE 'America/New_York')
+            ORDER BY day
+            """
+        ),
+        {"start": start, "end": end, "ch": channels or []},
+    )
+    return {r.day: r.kwh for r in rows}

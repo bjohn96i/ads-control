@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -6,7 +6,7 @@ from sqlalchemy import text
 
 from adscontrol.app import create_app
 from adscontrol.config import Settings
-from adscontrol.energy import energy_by_zone
+from adscontrol.energy import add_manual_day, energy_by_zone
 
 pytestmark = pytest.mark.integration
 
@@ -237,3 +237,55 @@ async def test_a_room_name_with_a_slash_still_opens(api, session):
         await session.commit()
     assert response.status_code == 200
     assert response.json()["name"] == "Up/Down"
+
+
+@pytest.fixture
+async def no_counter_energy(session):
+    await session.execute(text("TRUNCATE channel_energy, manual_daily_energy"))
+    await session.commit()
+    yield
+    await session.execute(text("TRUNCATE channel_energy, manual_daily_energy"))
+    await session.commit()
+
+
+async def test_counter_hours_fill_what_samples_missed(api, session, no_counter_energy):
+    hour = (NOW - timedelta(hours=5)).replace(minute=0)
+    await session.execute(
+        text("INSERT INTO channel_energy VALUES (:h, :c, 500, 'spread')"), {"h": hour, "c": DISHWASHER}
+    )
+    await session.commit()
+    body = (await api.get("/api/energy/ranking?range=7d")).json()
+    assert _zone(body, "Dishwasher")["kwh"] == pytest.approx(0.5)
+
+
+async def test_a_counter_hour_replaces_its_samples_not_adds_to_them(api, session, no_counter_energy):
+    hour = (NOW - timedelta(hours=3)).replace(minute=0)
+    await _fill(session, hour, hour + timedelta(hours=1), {DISHWASHER: 500.0})
+    await session.execute(
+        text("INSERT INTO channel_energy VALUES (:h, :c, 800, 'counter')"), {"h": hour, "c": DISHWASHER}
+    )
+    await session.commit()
+    body = (await api.get("/api/energy/ranking?range=7d")).json()
+    assert _zone(body, "Dishwasher")["kwh"] == pytest.approx(0.8)
+
+
+async def test_manual_days_count_toward_whole_house_but_not_circuits(api, session, no_counter_energy):
+    start = NOW - timedelta(hours=3)
+    await _fill(session, start, NOW, {DISHWASHER: 500.0, BLACK: 700.0, RED: 0.0})
+    before = (await api.get("/api/energy/ranking?range=7d")).json()
+    await add_manual_day(session, date(2026, 10, 15), 20.0)  # no whole-house data that day
+    await add_manual_day(session, date(2026, 10, 20), 99.0)  # this day has data: not counted
+    await session.commit()
+    body = (await api.get("/api/energy/ranking?range=7d")).json()
+    assert body["whole_house"]["kwh"] == pytest.approx(before["whole_house"]["kwh"] + 20)
+    assert (body["manual_kwh"], body["manual_days"]) == (pytest.approx(20), 1)
+    assert body["unmetered"]["kwh"] == pytest.approx(before["unmetered"]["kwh"])
+    assert _zone(body, "Dishwasher")["share"] == pytest.approx(_zone(before, "Dishwasher")["share"])
+
+
+async def test_add_day_upserts(session, no_counter_energy):
+    await add_manual_day(session, date(2026, 10, 24), 24.714)
+    await add_manual_day(session, date(2026, 10, 24), 24.714)
+    await session.commit()
+    rows = (await session.execute(text("SELECT day, kwh, source FROM manual_daily_energy"))).all()
+    assert [tuple(r) for r in rows] == [(date(2026, 10, 24), 24.714, "Refoss app")]
