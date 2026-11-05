@@ -9,6 +9,9 @@ services:
       context: ..
       dockerfile: Dockerfile
     image: adscontrol:latest
+    # Built from the repo on every deploy, never pulled: the images exist nowhere but here, and
+    # without this Portainer's redeploys either try Docker Hub or reuse the old image.
+    pull_policy: build
     container_name: adscontrol
     # host networking: the energy monitor is found by a UDP broadcast on the LAN
     network_mode: host
@@ -40,6 +43,7 @@ services:
       context: ..
       dockerfile: deploy/caddy/Dockerfile
     image: adscontrol-caddy:latest
+    pull_policy: build
     container_name: adscontrol-caddy
     network_mode: host
     environment:
