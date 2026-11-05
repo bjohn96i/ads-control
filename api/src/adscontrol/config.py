@@ -1,12 +1,18 @@
 """Settings from the environment and the git-ignored .env."""
 
+import re
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
+
+
+class MisenteredSetting(Exception):
+    """A setting whose value repeats its own name. Not a ValueError on purpose: pydantic would wrap
+    that with every setting's value, secrets included, in the message."""
 
 
 class Settings(BaseSettings):
@@ -43,6 +49,22 @@ class Settings(BaseSettings):
     lanthorn_url: str = (
         "http://localhost:8000"  # the sister network app; browsers open its links too
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def no_value_repeats_its_name(cls, data: dict) -> dict:
+        # The Portainer form once got REFOSS_HOST=REFOSS_HOST=…, which stopped recording silently.
+        for key, value in (data or {}).items():
+            if isinstance(value, str) and value.upper().startswith(f"{key.upper()}="):
+                raise MisenteredSetting(f"{key.upper()} repeats its own name; enter only the value")
+        return data
+
+    @field_validator("refoss_host")
+    @classmethod
+    def refoss_host_is_an_address(cls, value: str) -> str:
+        if not re.fullmatch(r"[A-Za-z0-9.-]+", value):
+            raise ValueError("REFOSS_HOST must be an IP address or host name, e.g. 192.168.4.254")
+        return value
 
 
 @lru_cache
