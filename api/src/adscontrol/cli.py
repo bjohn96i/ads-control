@@ -1,6 +1,8 @@
 """Command line: migrate, serve, refoss."""
 
 import asyncio
+import os
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -11,6 +13,7 @@ from sqlalchemy import text
 from adscontrol.app import jobs_allowed  # noqa: F401 - re-exported for the CLI's users
 from adscontrol.auth import set_pin
 from adscontrol.config import get_settings
+from adscontrol.db.copy import copy_data
 from adscontrol.db.engine import create_engine, make_session_factory
 from adscontrol.db.migrate import upgrade_head
 from adscontrol.maintenance.repo import import_tasks
@@ -206,6 +209,35 @@ def nest_pair(thermostat: str, zone: str) -> None:
 def migrate() -> None:
     """Create or update the schema."""
     upgrade_head(get_settings().database_url)
+
+
+def parse_since(value: str) -> datetime:
+    when = datetime.fromisoformat(value)
+    if when.tzinfo is None:
+        raise typer.BadParameter("--since needs a time zone, e.g. 2026-11-05T03:20:00+00:00")
+    return when
+
+
+@app.command("copy-data")
+def copy_data_command(
+    since: str | None = typer.Option(
+        None, help="Only readings from this time on, ISO 8601 with a zone."
+    ),
+) -> None:
+    """Copy every table between databases, for a server move. URLs come from the environment.
+
+    ADSCONTROL_SOURCE_URL and ADSCONTROL_TARGET_URL, never arguments, so no password lands in
+    shell history or the process list.
+    """
+    source, target = (
+        os.environ.get("ADSCONTROL_SOURCE_URL"),
+        os.environ.get("ADSCONTROL_TARGET_URL"),
+    )
+    if not source or not target:
+        raise typer.BadParameter("set ADSCONTROL_SOURCE_URL and ADSCONTROL_TARGET_URL")
+    start = parse_since(since) if since else None
+    for table, rows in asyncio.run(copy_data(source, target, start)).items():
+        typer.echo(f"{table:22} {rows}")
 
 
 @app.command()
