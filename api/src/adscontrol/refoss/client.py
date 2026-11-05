@@ -12,11 +12,13 @@ import socket
 import string
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import httpx
 
 CHANNEL_COUNT = 18
 DISCOVERY_MESSAGE = json.dumps({"id": "48cbd88f969eb3c486085cfe7b5eb1e4", "devName": "*"}).encode()
+READ_NAMESPACES = ("Appliance.Control.ElectricityX", "Appliance.Control.ConsumptionH")
 DISCOVERY_SEND_PORT = 9988
 DISCOVERY_LISTEN_PORT = 9989
 
@@ -78,7 +80,10 @@ class RefossClient:
         self._url = f"http://{host}/public"
         self._uuid = uuid
 
-    def _request(self) -> tuple[dict, str]:
+    def _request(self, namespace: str, payload: dict) -> tuple[dict, str]:
+        # Only reads: the same protocol can switch relays and change settings.
+        if namespace not in READ_NAMESPACES:
+            raise ValueError(f"{namespace} is not a read namespace")
         tag = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(16))
         message_id = hashlib.md5(tag.encode()).hexdigest()
         timestamp = int(time.time())
@@ -88,27 +93,33 @@ class RefossClient:
                     "from": f"/app/{tag}/subscribe",
                     "messageId": message_id,
                     "method": "GET",
-                    "namespace": "Appliance.Control.ElectricityX",
+                    "namespace": namespace,
                     "payloadVersion": 1,
                     "sign": hashlib.md5(f"{message_id}{timestamp}".encode()).hexdigest(),
                     "timestamp": timestamp,
                     "triggerSrc": "ADSControl",
                     "uuid": self._uuid,
                 },
-                "payload": {"electricity": {"channel": 65535}},
+                "payload": payload,
             },
             message_id,
         )
 
+    async def _get(self, namespace: str, payload: dict) -> dict:
+        body, message_id = self._request(namespace, payload)
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.post(self._url, json=body)
+        data = response.json()
+        header = data["header"]
+        if header["messageId"] != message_id or header["method"] != "GETACK":
+            raise RefossError("reply does not match the request")
+        return data["payload"]
+
     async def read_channels(self) -> list[ChannelReading]:
-        body, message_id = self._request()
         try:
-            async with httpx.AsyncClient(timeout=8) as client:
-                response = await client.post(self._url, json=body)
-            data = response.json()
-            header = data["header"]
-            if header["messageId"] != message_id or header["method"] != "GETACK":
-                raise RefossError("reply does not match the request")
+            payload = await self._get(
+                "Appliance.Control.ElectricityX", {"electricity": {"channel": 65535}}
+            )
             readings = [
                 ChannelReading(
                     channel=c["channel"],
@@ -118,10 +129,35 @@ class RefossClient:
                     power_factor=c["factor"],
                     consume_wh=c["mConsume"],
                 )
-                for c in data["payload"]["electricity"]
+                for c in payload["electricity"]
             ]
         except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
             raise RefossError(f"bad reply: {type(exc).__name__}: {exc}") from exc
         if len(readings) != CHANNEL_COUNT:
             raise RefossError(f"expected {CHANNEL_COUNT} channels, got {len(readings)}")
         return readings
+
+    async def read_hourly(
+        self, channel: int, now: datetime | None = None
+    ) -> list[tuple[datetime, int]]:
+        """Complete hours of the monitor's own hourly history for one channel, oldest first.
+
+        Each entry is stamped (UTC epoch) at the end of its hour and holds raw Wh; the list is
+        unordered and not always contiguous, and the current hour's entry is partial, so it's left
+        out. The channel is always named: the device drops the connection on an empty payload.
+        """
+        current = (now or datetime.now(timezone.utc)).replace(minute=0, second=0, microsecond=0)
+        try:
+            payload = await self._get(
+                "Appliance.Control.ConsumptionH", {"consumptionH": [{"channel": channel}]}
+            )
+            entries = payload["consumptionH"][0]["data"]
+            hours = {
+                datetime.fromtimestamp(e["timestamp"], timezone.utc).replace(
+                    minute=0, second=0, microsecond=0
+                ): int(e["value"])
+                for e in entries
+            }
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, IndexError) as exc:
+            raise RefossError(f"bad reply: {type(exc).__name__}: {exc}") from exc
+        return sorted((h, wh) for h, wh in hours.items() if h < current)

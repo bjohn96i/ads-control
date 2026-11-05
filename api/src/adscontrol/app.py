@@ -27,7 +27,12 @@ from adscontrol.api import (
 )
 from adscontrol.cameras.service import CAMERA_SYNC_S, EVENT_POLL_S, CameraService
 from adscontrol.config import ROOT_DIR, Settings, get_settings
-from adscontrol.counters import COUNTER_ENERGY_INTERVAL_S, CounterEnergy
+from adscontrol.counters import (
+    COUNTER_ENERGY_INTERVAL_S,
+    DEVICE_HISTORY_INTERVAL_S,
+    CounterEnergy,
+    DeviceHistory,
+)
 from adscontrol.db.engine import create_engine, make_session_factory
 from adscontrol.detect.store import run_detection
 from adscontrol.nest.sdm import SdmClient
@@ -76,6 +81,13 @@ def create_app(
         jobs = [
             Job("refoss", SAMPLE_INTERVAL_S, recorder.poll),
             Job("counter_energy", COUNTER_ENERGY_INTERVAL_S, CounterEnergy(sessions).run),
+            Job(
+                "device_history",
+                DEVICE_HISTORY_INTERVAL_S,
+                DeviceHistory(
+                    settings.refoss_host, sessions, uuid_path=settings.refoss_uuid_path
+                ).run,
+            ),
             Job("detect", DETECT_INTERVAL_S, detect),
         ]
         if sdm is not None:

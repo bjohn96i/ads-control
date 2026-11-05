@@ -23,6 +23,27 @@ _INSERT = text(
 log = logging.getLogger(__name__)
 
 
+async def known_uuid(
+    host: str, uuid_path: Path | None, discover: Callable[[str], Awaitable[str]]
+) -> str:
+    """The monitor's id, discovered once and remembered (delete the file if it's ever replaced).
+
+    Discovery is a UDP broadcast that now and then goes unanswered; reads are unicast and steady.
+    """
+    remembered = ""
+    if uuid_path is not None and uuid_path.exists():
+        remembered = uuid_path.read_text().strip()
+    if remembered:
+        return remembered
+    uuid = await discover(host)
+    if uuid_path is not None:
+        try:
+            uuid_path.write_text(uuid + "\n")
+        except OSError as exc:  # remembering is a convenience; a gap in the recording is not
+            log.warning("could not remember the monitor id in %s: %s", uuid_path, exc)
+    return uuid
+
+
 class Recorder:
     def __init__(
         self,
@@ -41,21 +62,7 @@ class Recorder:
         self._client = None
 
     async def _uuid(self) -> str:
-        # Discovery is a broadcast the monitor's Wi-Fi often misses while idle; reads are unicast.
-        # The uuid never changes, so it is found once and remembered (delete the file if the
-        # monitor is ever replaced).
-        remembered = ""
-        if self._uuid_path is not None and self._uuid_path.exists():
-            remembered = self._uuid_path.read_text().strip()
-        if remembered:
-            return remembered
-        uuid = await self._discover(self._host)
-        if self._uuid_path is not None:
-            try:
-                self._uuid_path.write_text(uuid + "\n")
-            except OSError as exc:  # remembering is a convenience; a gap in the recording is not
-                log.warning("could not remember the monitor id in %s: %s", self._uuid_path, exc)
-        return uuid
+        return await known_uuid(self._host, self._uuid_path, self._discover)
 
     async def poll(self) -> None:
         if self._client is None:

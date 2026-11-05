@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from adscontrol.counters import CounterEnergy
+from adscontrol.counters import CounterEnergy, DeviceHistory
 
 pytestmark = pytest.mark.integration
 
@@ -63,3 +63,43 @@ async def test_device_rows_are_left_alone(engine, session, clean):
     await _readings(session, START, minutes=60, wh_start=1000)
     await CounterEnergy(async_sessionmaker(engine)).run()
     assert (await _rows(session))[(START, 1)] == (999.0, "device")
+
+
+class _History:
+    def __init__(self, hours):
+        self.hours = hours
+        self.asked: list[int] = []
+
+    async def read_hourly(self, channel, now=None):
+        self.asked.append(channel)
+        return self.hours
+
+
+def _device_job(engine, client) -> DeviceHistory:
+    async def discover(host):
+        return "uuid"
+
+    return DeviceHistory(
+        "host",
+        async_sessionmaker(engine),
+        discover=discover,
+        make_client=lambda host, uuid: client,
+        pause_s=0,
+    )
+
+
+async def test_device_hours_replace_counter_and_spread_rows(engine, session, clean):
+    await session.execute(
+        text("INSERT INTO channel_energy VALUES (:h, 1, 120, 'spread')"), {"h": START}
+    )
+    await session.commit()
+    client = _History([(START, 500)])
+    await _device_job(engine, client).run()
+    assert (await _rows(session))[(START, 1)] == (500.0, "device")
+    assert client.asked == list(range(1, 19))
+
+
+async def test_device_values_are_stored_raw(engine, session, clean):
+    """Channel 17 is the water heater, multiplier 2; storage stays raw like consume_wh."""
+    await _device_job(engine, _History([(START, 339)])).run()
+    assert (await _rows(session))[(START, 17)] == (339.0, "device")

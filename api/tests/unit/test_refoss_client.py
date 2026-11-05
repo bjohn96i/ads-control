@@ -1,13 +1,14 @@
 import hashlib
 import inspect
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
 import pytest
 import respx
 
-from adscontrol.refoss.client import ChannelReading, RefossClient, RefossError
+from adscontrol.refoss.client import READ_NAMESPACES, ChannelReading, RefossClient, RefossError
 
 FIXTURE = json.loads(
     (Path(__file__).parents[1] / "fixtures" / "refoss_electricity.json").read_text()
@@ -76,7 +77,7 @@ def test_client_exposes_no_write_method():
         for name, _ in inspect.getmembers(RefossClient, inspect.isfunction)
         if not name.startswith("_")
     ]
-    assert public == ["read_channels"]
+    assert public == ["read_channels", "read_hourly"]
 
 
 @respx.mock
@@ -122,3 +123,58 @@ def test_discovery_keeps_only_the_configured_host():
     assert uuid_from_reply(reply, "192.168.4.254", "192.168.4.254") == "abc"
     assert uuid_from_reply(reply, "192.168.4.9", "192.168.4.254") is None
     assert uuid_from_reply(b"not json", "192.168.4.254", "192.168.4.254") is None
+
+
+NOW = datetime(2026, 11, 5, 5, 26, 46, tzinfo=timezone.utc)
+
+
+def _hourly_reply(request: httpx.Request) -> httpx.Response:
+    header = json.loads(request.content)["header"]
+    # Shaped like a captured reply: unordered, stamped at the end of each hour, newest partial.
+    data = [
+        {
+            "timestamp": int(datetime(2026, 11, 5, 4, 59, tzinfo=timezone.utc).timestamp()),
+            "value": 339,
+        },
+        {
+            "timestamp": int(datetime(2026, 11, 4, 22, 59, tzinfo=timezone.utc).timestamp()),
+            "value": 293,
+        },
+        {
+            "timestamp": int(datetime(2026, 11, 5, 5, 26, 40, tzinfo=timezone.utc).timestamp()),
+            "value": 12,
+        },
+        {
+            "timestamp": int(datetime(2026, 11, 5, 1, 59, 1, tzinfo=timezone.utc).timestamp()),
+            "value": 164,
+        },
+    ]
+    return httpx.Response(
+        200,
+        json={
+            "header": {"messageId": header["messageId"], "method": "GETACK"},
+            "payload": {"consumptionH": [{"channel": 17, "total": 0, "data": data}]},
+        },
+    )
+
+
+@respx.mock
+async def test_read_hourly_returns_complete_hours_by_timestamp():
+    route = respx.post(URL).mock(side_effect=_hourly_reply)
+    hours = await _client().read_hourly(17, now=NOW)
+    assert hours == [
+        (datetime(2026, 11, 4, 22, tzinfo=timezone.utc), 293),
+        (datetime(2026, 11, 5, 1, tzinfo=timezone.utc), 164),
+        (datetime(2026, 11, 5, 4, tzinfo=timezone.utc), 339),
+    ]
+    body = json.loads(route.calls[0].request.content)
+    assert body["header"]["method"] == "GET"
+    assert body["header"]["namespace"] == "Appliance.Control.ConsumptionH"
+    # An empty payload makes the device drop the connection; the channel is always named.
+    assert body["payload"] == {"consumptionH": [{"channel": 17}]}
+
+
+def test_only_read_namespaces_can_be_requested():
+    assert READ_NAMESPACES == ("Appliance.Control.ElectricityX", "Appliance.Control.ConsumptionH")
+    with pytest.raises(ValueError):
+        _client()._request("Appliance.Control.Bind", {})

@@ -4,16 +4,24 @@ Each reading carries consume_wh, a per-channel running total that resets at loca
 1st of each month. The difference between readings is exact energy whatever happened in between.
 """
 
+import asyncio
+import logging
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from itertools import pairwise
+from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from adscontrol.refoss.client import CHANNEL_COUNT
+from adscontrol.refoss.client import CHANNEL_COUNT, RefossClient, RefossError, discover_uuid
+from adscontrol.refoss.recorder import known_uuid
+
+log = logging.getLogger(__name__)
 
 HOUR = timedelta(hours=1)
+DEVICE_HISTORY_INTERVAL_S = 3600  # the monitor keeps 48 hours, so hourly reads miss nothing
 COUNTER_ENERGY_INTERVAL_S = 60
 GAP_S = 60  # readings come every 10 s; anything wider is a gap whose energy gets spread
 
@@ -104,4 +112,52 @@ class CounterEnergy:
                 ]
                 if values:
                     await session.execute(_UPSERT, values)
+            await session.commit()
+
+
+_DEVICE_UPSERT = text(
+    """
+    INSERT INTO channel_energy (hour, channel, wh, source) VALUES (:hour, :channel, :wh, 'device')
+    ON CONFLICT (hour, channel) DO UPDATE SET wh = EXCLUDED.wh, source = 'device'
+    """
+)
+
+
+class DeviceHistory:
+    """Copies the monitor's own hourly history over our hours: exact, and it covers our outages."""
+
+    def __init__(
+        self,
+        host: str,
+        sessions: async_sessionmaker[AsyncSession],
+        *,
+        discover: Callable[[str], Awaitable[str]] = discover_uuid,
+        make_client: Callable[[str, str], RefossClient] = RefossClient,
+        uuid_path: Path | None = None,
+        pause_s: float = 1.0,
+    ) -> None:
+        self._host = host
+        self._sessions = sessions
+        self._discover = discover
+        self._make_client = make_client
+        self._uuid_path = uuid_path
+        self._pause_s = pause_s
+
+    async def run(self) -> None:
+        client = self._make_client(
+            self._host, await known_uuid(self._host, self._uuid_path, self._discover)
+        )
+        async with self._sessions() as session:
+            for channel in range(1, CHANNEL_COUNT + 1):
+                try:
+                    hours = await client.read_hourly(channel)
+                except RefossError as exc:  # one channel's miss shouldn't cost the rest
+                    log.warning("hourly history for channel %s: %s", channel, exc)
+                    continue
+                if hours:
+                    await session.execute(
+                        _DEVICE_UPSERT,
+                        [{"hour": h, "channel": channel, "wh": wh} for h, wh in hours],
+                    )
+                await asyncio.sleep(self._pause_s)
             await session.commit()
