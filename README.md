@@ -77,7 +77,7 @@ Settings come from `.env` (see `.env.example`). The main ones:
 |---|---|
 | `DATABASE_URL` | Postgres/TimescaleDB connection |
 | `REFOSS_HOST` | The energy monitor's LAN address |
-| `ALLOWED_HOSTS` | JSON list of the hostnames this server answers to: its LAN IP, `.local` name, `localhost`. Others are refused |
+| `ALLOWED_HOSTS` | JSON list of the hostnames this server answers to, such as its LAN IP and `.local` name. Others are refused. Defaults to `["localhost"]` only |
 | `HOUSEHOLD` | JSON list of first names for the maintenance page's "who's using this phone" |
 | `WEATHER_LAT`, `WEATHER_LON` | Approximate location for the weather (rounded to one decimal before sending) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SDM_PROJECT_ID` | Google Nest Device Access |
