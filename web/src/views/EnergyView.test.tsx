@@ -249,4 +249,9 @@ describe("EnergyView", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Dishwasher" }));
     expect(await screen.findByText(/can.t load this detail/i)).toBeInTheDocument();
   });
+
+  it("says_when_days_came_from_the_refoss_app", async () => {
+    show({ ...RANKING, manual_kwh: 251.8, manual_days: 9 });
+    expect(await screen.findByText(/includes 9 days from the Refoss app, not split by circuit/i)).toBeInTheDocument();
+  });
 });

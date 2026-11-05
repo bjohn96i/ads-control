@@ -10,6 +10,8 @@ type Ranking = {
   start: string;
   end: string;
   since_bill: boolean;
+  manual_kwh?: number;
+  manual_days?: number;
   zones: RankedZone[];
   charger_estimate: EnergyLine;
   unmetered: EnergyLine;
@@ -236,6 +238,11 @@ export function EnergyView() {
               <p className="sub">
                 {day(data.start)} – {day(data.end)}
               </p>
+              {data.manual_days ? (
+                <p className="sub">
+                  Includes {data.manual_days} days from the Refoss app, not split by circuit
+                </p>
+              ) : null}
             </div>
             <div className="card">
               <div className="eyebrow">Estimated cost</div>

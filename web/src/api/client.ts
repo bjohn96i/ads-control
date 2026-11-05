@@ -40,6 +40,21 @@ export type MaintenanceItem = { id: number; name: string; last_done: string | nu
 
 export type RepeatUnit = "day" | "week" | "month";
 
+export type CurrentBill = {
+  period_start: string;
+  period_end: string;
+  day: number;
+  days: number;
+  kwh_so_far: number;
+  cost_so_far: number;
+  projected_kwh: number;
+  projected_cost: number;
+  last_charge: number;
+  change_pct: number;
+  verdict: "less" | "more" | "about the same";
+  manual_days: number;
+};
+
 export type MaintenanceTask = {
   id: number;
   name: string;

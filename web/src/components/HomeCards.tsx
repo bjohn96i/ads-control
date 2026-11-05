@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { getJson, type Live, type MaintenanceTask } from "../api/client";
-import { dueText, formatKwh, formatWatts } from "./format";
+import { type CurrentBill, getJson, type Live, type MaintenanceTask } from "../api/client";
+import { dueText, formatKwh, formatWatts, thisBillText } from "./format";
 import { FeedStopped, type Stopped } from "./FeedStopped";
 import { PinGate } from "./PinGate";
 import { blocked, type ThermostatState, ThermostatControls } from "./ThermostatControls";
@@ -101,12 +101,32 @@ function monthOf(isoDate: string): string {
 }
 
 export function BillCard() {
+  const current = useQuery({
+    queryKey: ["bill-current"],
+    queryFn: () => getJson<CurrentBill | null>("/api/bills/current"),
+    refetchInterval: 600_000,
+  });
   const { data, isSuccess, isError } = useQuery({
     queryKey: ["bill-latest"],
     queryFn: () => getJson<{ actual_charge: number; period_end: string } | null>("/api/bills/latest"),
     refetchInterval: 3_600_000,
   });
   const [dollars, cents] = data ? data.actual_charge.toFixed(2).split(".") : [];
+  if (current.data) {
+    const text = thisBillText(current.data);
+    return (
+      <Link className="card" to="/bills">
+        <div className="eyebrow">
+          <span>This bill · estimate</span>
+          <span className="go">→</span>
+        </div>
+        <div className="big">{text.projected}</div>
+        <p className="sub">{text.period}</p>
+        <p className={text.higher ? "sub warn" : "sub"}>{text.compare}</p>
+        <p className="sub">{text.soFar}</p>
+      </Link>
+    );
+  }
   return (
     <Link className="card" to="/bills">
       <div className="eyebrow">

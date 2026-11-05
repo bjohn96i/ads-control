@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { ApiError, getJson, send } from "../api/client";
+import { ApiError, type CurrentBill, getJson, send } from "../api/client";
+import { thisBillText } from "../components/format";
 
 type Fields = {
   period_start: string | null;
@@ -138,6 +139,27 @@ function toForm(draft: Partial<Fields>): Record<keyof Fields, string> {
   return form;
 }
 
+function ThisBill() {
+  const { data } = useQuery({
+    queryKey: ["bill-current"],
+    queryFn: () => getJson<CurrentBill | null>("/api/bills/current"),
+  });
+  if (!data) return null;
+  const text = thisBillText(data);
+  return (
+    <section className="card">
+      <div className="eyebrow">This bill so far</div>
+      <div className="big">{text.projected}</div>
+      <p className="sub">{text.period} · estimate</p>
+      <p className={text.higher ? "sub warn" : "sub"}>{text.compare}</p>
+      <p className="sub">
+        {text.soFar} · projected {Math.round(data.projected_kwh)} kWh
+        {data.manual_days > 0 ? ` · includes ${data.manual_days} days from the Refoss app` : ""}
+      </p>
+    </section>
+  );
+}
+
 export function BillsView() {
   const client = useQueryClient();
   const [form, setForm] = useState<Record<keyof Fields, string> | null>(null);
@@ -152,6 +174,7 @@ export function BillsView() {
   const refresh = () => {
     client.invalidateQueries({ queryKey: ["bills"] });
     client.invalidateQueries({ queryKey: ["bill-latest"] });
+    client.invalidateQueries({ queryKey: ["bill-current"] });
   };
 
   const upload = async (file: File | undefined) => {
@@ -216,6 +239,7 @@ export function BillsView() {
         <h1>Bills</h1>
         <span className="meta"><a href="/api/bills/export">Back up the bills</a></span>
       </header>
+      <ThisBill />
       <div className="task-actions">
         <label className="upload">
           Upload a bill (PDF)

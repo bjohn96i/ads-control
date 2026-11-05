@@ -1,4 +1,4 @@
-import type { RatePeriod, RepeatUnit } from "../api/client";
+import type { CurrentBill, RatePeriod, RepeatUnit } from "../api/client";
 
 export function formatWatts(watts: number | null): string {
   if (watts === null) return "—";
@@ -27,3 +27,23 @@ export const PERIOD_LABEL: Record<RatePeriod, string> = {
   off_peak: "Off-peak",
   super_off_peak: "Super off-peak",
 };
+
+
+function shortDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/** The words for the current bill, shared by the home card and the Bills page. */
+export function thisBillText(bill: CurrentBill) {
+  const pct = Math.round(Math.abs(bill.change_pct) * 100);
+  return {
+    projected: `≈ $${Math.round(bill.projected_cost)}`,
+    period: `${shortDate(bill.period_start)} – ${shortDate(bill.period_end)} · day ${bill.day} of ${bill.days}`,
+    compare: `Last bill $${bill.last_charge.toFixed(2)} · on track for ${
+      bill.verdict === "about the same" ? "about the same" : `${pct}% ${bill.verdict}`
+    }`,
+    soFar: `$${Math.round(bill.cost_so_far)} so far · ${Math.round(bill.kwh_so_far)} kWh`,
+    higher: bill.verdict === "more",
+  };
+}

@@ -28,6 +28,21 @@ const LIVE = {
   ],
 };
 
+const ESTIMATE = {
+  period_start: "2026-10-24",
+  period_end: "2026-11-22",
+  day: 12,
+  days: 30,
+  kwh_so_far: 405.2,
+  cost_so_far: 55.1,
+  projected_kwh: 1013,
+  projected_cost: 137.2,
+  last_charge: 150.26,
+  change_pct: -0.087,
+  verdict: "less",
+  manual_days: 9,
+};
+
 function renderHome(
   body: unknown,
   ok = true,
@@ -35,7 +50,7 @@ function renderHome(
   bill: unknown = null,
   climate: unknown[] = [],
   events: unknown[] = [],
-  { unlocked = false, network = true, failing = [] as string[] } = {},
+  { unlocked = false, network = true, failing = [] as string[], current = null as unknown } = {},
 ) {
   vi.stubGlobal(
     "fetch",
@@ -61,6 +76,8 @@ function renderHome(
         ? new Response(JSON.stringify({ tasks }))
         : url === "/api/bills/latest"
           ? new Response(JSON.stringify(bill))
+        : url === "/api/bills/current"
+          ? new Response(JSON.stringify(current))
           : new Response(JSON.stringify(body), { status: ok ? 200 : 500 }),
     ),
   );
@@ -219,6 +236,32 @@ describe("HomeView", () => {
     expect(await within(link).findByText("$150")).toBeInTheDocument();
     expect(within(link).getByText(".26")).toBeInTheDocument();
     expect(within(link).getByText("October · actual charge")).toBeInTheDocument();
+  });
+
+  it("this_bill_card_projects_against_the_last_bill", async () => {
+    renderHome(LIVE, true, [], { actual_charge: 150.26, period_end: "2026-10-23" }, [], [], { current: ESTIMATE });
+    const link = (await screen.findByText(/^This bill/)).closest("a")!;
+    expect(link).toHaveAttribute("href", "/bills");
+    expect(link).toHaveTextContent("estimate");
+    expect(await within(link).findByText("≈ $137")).toBeInTheDocument();
+    expect(within(link).getByText("Oct 24 – Nov 22 · day 12 of 30")).toBeInTheDocument();
+    expect(within(link).getByText("Last bill $150.26 · on track for 9% less")).toBeInTheDocument();
+    expect(within(link).getByText("$55 so far · 405 kWh")).toBeInTheDocument();
+  });
+
+  it("this_bill_card_warns_when_heading_higher", async () => {
+    renderHome(LIVE, true, [], { actual_charge: 150.26, period_end: "2026-10-23" }, [], [], {
+      current: { ...ESTIMATE, projected_cost: 171.4, change_pct: 0.141, verdict: "more" },
+    });
+    const line = await screen.findByText("Last bill $150.26 · on track for 14% more");
+    expect(line).toHaveClass("warn");
+  });
+
+  it("this_bill_card_says_about_the_same", async () => {
+    renderHome(LIVE, true, [], { actual_charge: 150.26, period_end: "2026-10-23" }, [], [], {
+      current: { ...ESTIMATE, projected_cost: 151, change_pct: 0.005, verdict: "about the same" },
+    });
+    expect(await screen.findByText("Last bill $150.26 · on track for about the same")).toBeInTheDocument();
   });
 
   it("ac_card_has_real_controls_behind_the_pin", async () => {

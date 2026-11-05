@@ -31,6 +31,7 @@ function show({
   compare = { billed_kwh: 1058, measured_kwh: 1000, coverage: 0.98, difference_pct: -5.5 },
   draft = DRAFT as Record<string, unknown>,
   saveStatus = 201,
+  current = null as unknown,
 } = {}) {
   calls = [];
   vi.stubGlobal(
@@ -38,6 +39,7 @@ function show({
     vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
       if (method === "GET") {
+        if (url === "/api/bills/current") return new Response(JSON.stringify(current));
         return new Response(JSON.stringify(url.endsWith("/compare") ? compare : { bills }));
       }
       calls.push({
@@ -155,5 +157,20 @@ describe("BillsView", () => {
     expect(calls).toHaveLength(0);
     fireEvent.click(card.getByRole("button", { name: /yes, delete/i }));
     await waitFor(() => expect(calls[0]?.url).toBe("/api/bills/1"));
+  });
+
+  it("shows_this_bill_so_far_with_the_refoss_days", async () => {
+    show({
+      current: {
+        period_start: "2026-10-24", period_end: "2026-11-22", day: 12, days: 30, kwh_so_far: 405.2,
+        cost_so_far: 55.1, projected_kwh: 1013, projected_cost: 137.2, last_charge: 150.26,
+        change_pct: -0.087, verdict: "less", manual_days: 9,
+      },
+    });
+    const section = (await screen.findByText("This bill so far")).closest("section")!;
+    expect(section).toHaveTextContent("≈ $137");
+    expect(section).toHaveTextContent("on track for 9% less");
+    expect(section).toHaveTextContent("405 kWh");
+    expect(section).toHaveTextContent("includes 9 days from the Refoss app");
   });
 });
