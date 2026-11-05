@@ -1,4 +1,4 @@
-import type { RatePeriod } from "../api/client";
+import type { RatePeriod, RepeatUnit } from "../api/client";
 
 export function formatWatts(watts: number | null): string {
   if (watts === null) return "—";
@@ -15,6 +15,11 @@ export function dueText(nextDue: string | null, overdue: boolean): string | null
     day: "numeric",
   });
   return overdue ? `Overdue since ${when}` : `Due ${when}`;
+}
+
+export function repeatText(every: number | null, unit: RepeatUnit): string {
+  if (every === null) return "Doesn't repeat";
+  return every === 1 ? `Every ${unit}` : `Every ${every} ${unit}s`;
 }
 
 export const PERIOD_LABEL: Record<RatePeriod, string> = {

@@ -93,6 +93,12 @@ async function row(name: string) {
 }
 
 describe("MaintenanceView", () => {
+  it("cards_say_how_often_a_task_repeats", async () => {
+    show();
+    expect((await row("HVAC Filters")).getByText("Every 3 months")).toBeInTheDocument();
+    expect((await row("Fridge Filter")).getByText("Doesn't repeat")).toBeInTheDocument();
+  });
+
   it("one_tap_marks_done_and_shows_undo", async () => {
     show();
     fireEvent.click((await row("Fridge Filter")).getByRole("button", { name: /done today/i }));

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ApiError, getJson, type MaintenanceTask, send } from "../api/client";
-import { dueText } from "../components/format";
+import { dueText, repeatText } from "../components/format";
 import { type Act, AddTask, TaskEditor } from "../components/TaskEditor";
 
 const PEOPLE = ["John", "Sam"];
@@ -78,6 +78,7 @@ function TaskCard({
     <article className={task.overdue ? "panel task overdue" : "panel task"}>
       <h2>{task.name}</h2>
       {due ? <p className="due">{due}</p> : null}
+      <p className="sub">{repeatText(task.repeat_every, task.repeat_unit)}</p>
       {!hasRooms ? (
         <p className="sub">{task.last_done ? `Last done ${task.last_done}` : "Never done"}</p>
       ) : null}
