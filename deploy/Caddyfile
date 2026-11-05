@@ -1,7 +1,0 @@
-# LAN HTTPS for the PIN, thermostat changes and cameras, using Caddy's own local certificate.
-# The IP and .local names need no DNS, so they keep working with iCloud Private Relay on and on
-# devices whose DNS does not go through the Pi-hole.
-https://MacBook-Air-2.local, https://192.168.4.41, https://control.home.arpa {
-	tls internal
-	reverse_proxy localhost:8100
-}

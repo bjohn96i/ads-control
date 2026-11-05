@@ -119,33 +119,47 @@ While the Google Cloud app is in Testing, Google's sign-in expires every 7 days.
 (Google Auth Platform → Audience) stops that; personal Device Access projects don't need Google's
 verification, and the consent screen just shows an "unverified app" warning.
 
-## Running on a Mac
+## Deploying with Portainer
 
-The recorder only captures while the server runs, so a gap is permanent. A launchd service keeps
-it running and the Mac awake on mains power:
+Production runs as a Portainer stack built straight from this repository (`deploy/compose.yml`):
+the app and a Caddy container for HTTPS, both with host networking (the energy monitor is found by
+a LAN broadcast) and an external Postgres/TimescaleDB server. Both images are built on every deploy
+(`pull_policy: build`), so Portainer's automatic updates and **Pull and redeploy** pick up new code.
 
-```bash
-cp deploy/mac/org.adscontrol.plist ~/Library/LaunchAgents/     # edit the paths in it first
-launchctl load ~/Library/LaunchAgents/org.adscontrol.plist
-```
+1. **Database.** Create a database and a non-superuser login for it on your Postgres server, and
+   create the `timescaledb` extension in it as a superuser. The app runs its migrations on start.
+2. **Volumes.** Create two Docker volumes on the host and fill them before the first deploy:
+   - `adscontrol-data` (mounted at `/app/data`, owned by uid 1000): `nest_token` (after
+     `adscontrol nest login`), `traffic_cameras.yaml` (optional), and optionally `refoss_uuid`.
+   - `adscontrol-caddy-data` (mounted at `/data`): empty for a new certificate authority, or an
+     existing Caddy local CA under `caddy/pki/authorities/local/` to keep phones trusting it.
+3. **Stack.** In Portainer: Stacks → Add stack → Repository, this repo's URL, reference
+   `refs/heads/main`, compose path `deploy/compose.yml`, GitOps updates by polling. Enter the
+   settings from [Configuration](#configuration) as the stack's environment variables (values only,
+   not `NAME=value` in the value box). Edit `deploy/caddy/Caddyfile` for your own host names.
+
+The recorder only captures while the server runs, so a gap is permanent. While a file named `hold`
+exists in the data volume the recorder jobs stay off, which lets a new deployment wait for a
+cutover. The monitor's id is remembered in `refoss_uuid` after the first discovery; delete that file
+if the monitor is ever replaced.
+
+**Moving to a new database server.** `adscontrol copy-data` copies every table, reading
+`ADSCONTROL_SOURCE_URL` and `ADSCONTROL_TARGET_URL` from the environment (never the command line).
+Run it once in full while the old server keeps recording, then stop the old recorder, run it again
+with `--since <the first run's start, ISO 8601 with a zone>`, and start the new recorder.
 
 ## PIN and HTTPS
 
-Cameras and thermostat changes need a household PIN, and the PIN only works over HTTPS. Caddy
-provides a local certificate:
+Cameras and thermostat changes need a household PIN, and the PIN only works over HTTPS:
 
 ```bash
 cd api && uv run adscontrol pin set     # in your own terminal; it asks twice
-brew install caddy
-cp deploy/mac/org.adscontrol.caddy.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/org.adscontrol.caddy.plist
-caddy trust
 ```
 
-Edit `deploy/Caddyfile` to list your own IP and `.local` name. On each phone, install Caddy's root
-certificate (`~/Library/Application Support/Caddy/pki/authorities/local/root.crt`) and, on iPhone,
-trust it under Settings > General > About > Certificate Trust Settings. That certificate can vouch
-for any site on that phone, so keep the computer's copy of its private key private.
+Caddy serves the hosts in `deploy/caddy/Caddyfile` with its own local certificate authority. On
+each phone, install that authority's root certificate (`caddy/pki/authorities/local/root.crt` in the
+Caddy volume) and, on iPhone, trust it under Settings > General > About > Certificate Trust
+Settings. That certificate can vouch for any site on that phone, so keep its private key private.
 
 ## Security and privacy
 
