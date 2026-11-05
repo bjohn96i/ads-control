@@ -1,6 +1,7 @@
 """FastAPI application factory: wires the database, jobs and routes."""
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -37,15 +38,23 @@ from adscontrol.weather import WEATHER_INTERVAL_S, WeatherRecorder
 DETECT_INTERVAL_S = 900
 
 
+def jobs_allowed(settings: Settings) -> bool:
+    return not settings.hold_path.exists()
+
+
 def create_app(
     settings: Settings | None = None,
     *,
     db_check: Callable[[], Awaitable[bool]] | None = None,
     jobs: list[Job] | None = None,
-    start_jobs: bool = True,
+    start_jobs: bool | None = None,
     web_dir: Path = ROOT_DIR / "web" / "dist",
 ) -> FastAPI:
     settings = settings or get_settings()
+    if start_jobs is None:
+        start_jobs = jobs_allowed(settings)
+        if not start_jobs:
+            logging.getLogger(__name__).warning("recorder held: %s exists", settings.hold_path)
     engine = create_engine(settings.database_url)
     sessions = make_session_factory(engine)
     sdm = None

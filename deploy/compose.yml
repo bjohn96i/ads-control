@@ -1,0 +1,55 @@
+# Production, as a Portainer git stack: repo https://github.com/bjohn96i/ads-control, branch main,
+# this file. Values come from the stack's environment variables in Portainer, never from git.
+# The database is a separate Postgres/TimescaleDB server named by DATABASE_URL.
+name: adscontrol
+
+services:
+  adscontrol:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: adscontrol:latest
+    container_name: adscontrol
+    # host networking: the energy monitor is found by a UDP broadcast on the LAN
+    network_mode: host
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REFOSS_HOST: ${REFOSS_HOST}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      SDM_PROJECT_ID: ${SDM_PROJECT_ID}
+      GOOGLE_PUBSUB_SUBSCRIPTION: ${GOOGLE_PUBSUB_SUBSCRIPTION}
+      WEATHER_LAT: ${WEATHER_LAT}
+      WEATHER_LON: ${WEATHER_LON}
+      HOUSEHOLD: ${HOUSEHOLD}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      LANTHORN_URL: ${LANTHORN_URL}
+      TZ: ${TZ:-America/New_York}
+    volumes:
+      - adscontrol-data:/app/data   # nest_token, traffic_cameras.yaml, and the cutover hold file
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  caddy:
+    build:
+      context: ..
+      dockerfile: deploy/caddy/Dockerfile
+    image: adscontrol-caddy:latest
+    container_name: adscontrol-caddy
+    network_mode: host
+    environment:
+      TZ: ${TZ:-America/New_York}
+    volumes:
+      - adscontrol-caddy-data:/data   # certificates, including the carried-over local CA
+    restart: unless-stopped
+
+volumes:
+  adscontrol-data:
+    external: true
+  adscontrol-caddy-data:
+    external: true

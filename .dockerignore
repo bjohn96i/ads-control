@@ -1,0 +1,15 @@
+.git
+**/.env
+**/.env.*
+.superpowers
+docs
+data
+spikes
+deploy/google-branding
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+api/.venv
+web/node_modules
+web/dist
+web/tsconfig.tsbuildinfo

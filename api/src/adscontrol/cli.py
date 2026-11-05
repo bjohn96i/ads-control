@@ -8,6 +8,7 @@ import uvicorn
 import yaml
 from sqlalchemy import text
 
+from adscontrol.app import jobs_allowed  # noqa: F401 - re-exported for the CLI's users
 from adscontrol.auth import set_pin
 from adscontrol.config import get_settings
 from adscontrol.db.engine import create_engine, make_session_factory

@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     google_pubsub_subscription: str = ""
     nest_token_path: Path = ROOT_DIR / "data" / "nest_token"
     traffic_cameras_path: Path = ROOT_DIR / "data" / "traffic_cameras.yaml"
+    # While this file exists the recorder jobs stay off, so a new deployment can wait for cutover.
+    hold_path: Path = ROOT_DIR / "data" / "hold"
     lanthorn_url: str = (
         "http://localhost:8000"  # the sister network app; browsers open its links too
     )

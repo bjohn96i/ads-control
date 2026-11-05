@@ -1,0 +1,6 @@
+# HTTPS for the PIN, thermostat changes and cameras, from Caddy's own local CA. The CA files are
+# carried over from the old host in the caddy data volume, so phones that trust it keep working.
+https://192.168.4.227, https://control.home.arpa {
+	tls internal
+	reverse_proxy localhost:8100
+}
