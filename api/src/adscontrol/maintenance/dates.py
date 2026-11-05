@@ -2,7 +2,10 @@
 
 import calendar
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
+from typing import Literal
+
+Unit = Literal["day", "week", "month"]
 
 
 @dataclass(frozen=True)
@@ -25,13 +28,19 @@ def _add_months(day: date, months: int) -> date:
     return date(year, month, min(day.day, calendar.monthrange(year, month)[1]))
 
 
-def next_due(interval_months: int | None, item_ids: list[int], done: list[Done]) -> date | None:
-    if interval_months is None or not done:
+def _add(day: date, every: int, unit: Unit) -> date:
+    if unit == "month":
+        return _add_months(day, every)
+    return day + timedelta(days=every * (7 if unit == "week" else 1))
+
+
+def next_due(every: int | None, unit: Unit, item_ids: list[int], done: list[Done]) -> date | None:
+    if every is None or not done:
         return None
     if not item_ids:
-        return _add_months(max(d.on for d in done), interval_months)
+        return _add(max(d.on for d in done), every, unit)
     # A room that was skipped keeps the whole task due, so go by the room done longest ago.
     # A room never done counts from the task's first completion.
     latest = [max((d.on for d in done if d.item_id == i), default=None) for i in item_ids]
     first = min(d.on for d in done)
-    return _add_months(min(on or first for on in latest), interval_months)
+    return _add(min(on or first for on in latest), every, unit)

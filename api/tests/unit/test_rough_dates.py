@@ -18,19 +18,19 @@ def test_format_rough_never_shows_false_day(day, precision, text):
 
 
 def test_next_due_with_interval():
-    assert next_due(3, [], [Done(date(2026, 8, 29), None)]) == date(2026, 11, 29)
+    assert next_due(3, "month", [], [Done(date(2026, 8, 29), None)]) == date(2026, 11, 29)
 
 
 def test_next_due_keeps_month_end_valid():
-    assert next_due(1, [], [Done(date(2026, 1, 31), None)]) == date(2026, 2, 28)
+    assert next_due(1, "month", [], [Done(date(2026, 1, 31), None)]) == date(2026, 2, 28)
 
 
 def test_next_due_none_without_interval():
-    assert next_due(None, [], [Done(date(2026, 8, 29), None)]) is None
+    assert next_due(None, "month", [], [Done(date(2026, 8, 29), None)]) is None
 
 
 def test_next_due_none_when_never_done():
-    assert next_due(3, [], []) is None
+    assert next_due(3, "month", [], []) is None
 
 
 def test_next_due_uses_the_latest_completion():
@@ -39,7 +39,7 @@ def test_next_due_uses_the_latest_completion():
         Done(date(2026, 8, 29), None),
         Done(date(2026, 5, 23), None),
     ]
-    assert next_due(3, [], done) == date(2026, 11, 29)
+    assert next_due(3, "month", [], done) == date(2026, 11, 29)
 
 
 def test_next_due_for_item_task_uses_oldest_item():
@@ -48,9 +48,17 @@ def test_next_due_for_item_task_uses_oldest_item():
         Done(date(2026, 5, 23), 2),
         Done(date(2026, 8, 29), 1),
     ]
-    assert next_due(3, [1, 2], done) == date(2026, 8, 23)
+    assert next_due(3, "month", [1, 2], done) == date(2026, 8, 23)
 
 
 def test_item_never_done_counts_from_the_tasks_first_completion():
     done = [Done(date(2026, 5, 23), 1), Done(date(2026, 8, 29), 1)]
-    assert next_due(3, [1, 2], done) == date(2026, 8, 23)
+    assert next_due(3, "month", [1, 2], done) == date(2026, 8, 23)
+
+
+def test_next_due_in_weeks():
+    assert next_due(2, "week", [], [Done(date(2026, 11, 1), None)]) == date(2026, 11, 15)
+
+
+def test_next_due_in_days():
+    assert next_due(10, "day", [], [Done(date(2026, 11, 25), None)]) == date(2026, 12, 5)

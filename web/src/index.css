@@ -14,7 +14,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--sans); }
 a { color: inherit; }
-a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
 h2 { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
 p { margin: 4px 0; }
@@ -62,7 +62,7 @@ a.card:hover, .card-link:hover { border-color: var(--line-hover); }
 .section-head h2 { font: inherit; margin: 0; }
 
 /* controls */
-button, input[type="date"], input[type="number"], input[type="text"], input[type="password"], textarea {
+button, input[type="date"], input[type="number"], input[type="text"], input[type="password"], textarea, select {
   font: inherit;
   background: #18221a;
   color: var(--text);
@@ -260,3 +260,4 @@ a.traffic-cam:hover { border-color: var(--line-hover); }
   .traffic-cam { aspect-ratio: 3 / 1; }
   .scene { width: min(100%, calc((100vh - 250px) * 1586 / 992)); }
 }
+.editor .repeat { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }

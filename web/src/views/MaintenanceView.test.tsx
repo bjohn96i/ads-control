@@ -10,7 +10,8 @@ const TASKS = [
     name: "HVAC Filters",
     category: "House",
     notes: "14 x 25 x 1",
-    interval_months: 3,
+    repeat_every: 3,
+    repeat_unit: "month",
     items: [
       { id: 11, name: "Gym", last_done: "Aug 29, 2026" },
       { id: 12, name: "Living Room", last_done: "May 23, 2026" },
@@ -24,7 +25,8 @@ const TASKS = [
     name: "Fridge Filter",
     category: "House",
     notes: "",
-    interval_months: null,
+    repeat_every: null,
+    repeat_unit: "month",
     items: [],
     last_done: "May 2026",
     next_due: null,
@@ -199,7 +201,7 @@ describe("MaintenanceView", () => {
     const card = await editor("Fridge Filter");
     fireEvent.change(card.getByLabelText(/repeat every/i), { target: { value: "6" } });
     fireEvent.click(card.getByRole("button", { name: /save changes/i }));
-    await waitFor(() => expect(calls[0]?.body).toEqual({ interval_months: 6 }));
+    await waitFor(() => expect(calls[0]?.body).toEqual({ repeat_every: 6 }));
     expect(calls[0].url).toBe("/api/maintenance/2");
     expect(calls[0].method).toBe("PATCH");
   });
@@ -209,7 +211,26 @@ describe("MaintenanceView", () => {
     const card = await editor("HVAC Filters");
     fireEvent.change(card.getByLabelText(/repeat every/i), { target: { value: "" } });
     fireEvent.click(card.getByRole("button", { name: /save changes/i }));
-    await waitFor(() => expect(calls[0]?.body).toEqual({ interval_months: null }));
+    await waitFor(() => expect(calls[0]?.body).toEqual({ repeat_every: null }));
+  });
+
+  it("the_repeat_can_be_in_weeks", async () => {
+    show();
+    const card = await editor("Fridge Filter");
+    fireEvent.change(card.getByLabelText(/repeat unit/i), { target: { value: "week" } });
+    fireEvent.click(card.getByRole("button", { name: /save changes/i }));
+    await waitFor(() => expect(calls[0]?.body).toEqual({ repeat_unit: "week" }));
+  });
+
+  it("a_new_task_can_repeat_in_days", async () => {
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: /add a task/i }));
+    fireEvent.change(screen.getByLabelText(/task name/i), { target: { value: "Water plants" } });
+    fireEvent.change(screen.getByLabelText(/new task category/i), { target: { value: "House" } });
+    fireEvent.change(screen.getByLabelText(/^new task repeat$/i), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText(/new task repeat unit/i), { target: { value: "day" } });
+    fireEvent.click(screen.getByRole("button", { name: /save task/i }));
+    await waitFor(() => expect(calls[0]?.body).toMatchObject({ repeat_every: 3, repeat_unit: "day" }));
   });
 
   it("invalid_repeat_explains_and_saves_nothing", async () => {
@@ -301,7 +322,7 @@ describe("MaintenanceView", () => {
     fireEvent.click(await screen.findByRole("button", { name: /add a task/i }));
     fireEvent.change(screen.getByLabelText(/task name/i), { target: { value: "Dryer Vent" } });
     fireEvent.change(screen.getByLabelText(/new task category/i), { target: { value: "House" } });
-    fireEvent.change(screen.getByLabelText(/new task repeat/i), { target: { value: "12" } });
+    fireEvent.change(screen.getByLabelText(/^new task repeat$/i), { target: { value: "12" } });
     fireEvent.change(screen.getByLabelText(/rooms, one per line/i), {
       target: { value: "Laundry\n\n  Roof  \n" },
     });
@@ -311,7 +332,8 @@ describe("MaintenanceView", () => {
       name: "Dryer Vent",
       category: "House",
       notes: "",
-      interval_months: 12,
+      repeat_every: 12,
+      repeat_unit: "month",
       items: ["Laundry", "Roof"],
     });
   });

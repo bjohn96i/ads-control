@@ -1,13 +1,25 @@
 import { type FormEvent, useState } from "react";
-import type { MaintenanceItem, MaintenanceTask } from "../api/client";
+import type { MaintenanceItem, MaintenanceTask, RepeatUnit } from "../api/client";
 
 export type Act = (method: string, path: string, body?: unknown) => Promise<boolean>;
 
 /** Whole months above zero, or null for "no repeat". undefined means not valid. */
-export function parseMonths(text: string): number | null | undefined {
+export function parseRepeat(text: string): number | null | undefined {
   if (text.trim() === "") return null;
-  const months = Number(text);
-  return Number.isInteger(months) && months >= 1 ? months : undefined;
+  const count = Number(text);
+  return Number.isInteger(count) && count >= 1 ? count : undefined;
+}
+
+const REPEAT_ERROR = "Repeat must be a whole number, or blank.";
+
+function UnitSelect({ label, value, onChange }: { label: string; value: RepeatUnit; onChange: (unit: RepeatUnit) => void }) {
+  return (
+    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value as RepeatUnit)}>
+      <option value="day">days</option>
+      <option value="week">weeks</option>
+      <option value="month">months</option>
+    </select>
+  );
 }
 
 function RoomRow({
@@ -78,20 +90,22 @@ export function TaskEditor({
   const [name, setName] = useState(task.name);
   const [category, setCategory] = useState(task.category);
   const [notes, setNotes] = useState(task.notes);
-  const [repeat, setRepeat] = useState(task.interval_months?.toString() ?? "");
+  const [repeat, setRepeat] = useState(task.repeat_every?.toString() ?? "");
+  const [unit, setUnit] = useState<RepeatUnit>(task.repeat_unit);
   const [newRoom, setNewRoom] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    const months = parseMonths(repeat);
-    if (months === undefined) return onError("Repeat must be a whole number of months, or blank.");
+    const every = parseRepeat(repeat);
+    if (every === undefined) return onError(REPEAT_ERROR);
     if (!name.trim() || !category.trim()) return onError("A task needs a name and a category.");
     const changes: Record<string, unknown> = {};
     if (name.trim() !== task.name) changes.name = name.trim();
     if (category.trim() !== task.category) changes.category = category.trim();
     if (notes !== task.notes) changes.notes = notes;
-    if (months !== task.interval_months) changes.interval_months = months;
+    if (every !== task.repeat_every) changes.repeat_every = every;
+    if (unit !== task.repeat_unit) changes.repeat_unit = unit;
     if (Object.keys(changes).length === 0 || (await act("PATCH", `/api/maintenance/${task.id}`, changes))) {
       onClose();
     }
@@ -118,10 +132,14 @@ export function TaskEditor({
         Notes
         <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
       </label>
-      <label>
-        Repeat every (months, blank for no repeat)
-        <input type="number" min={1} value={repeat} onChange={(e) => setRepeat(e.target.value)} />
-      </label>
+      <div className="repeat">
+        <label>
+          Repeat every
+          <input type="number" min={1} value={repeat} onChange={(e) => setRepeat(e.target.value)} />
+        </label>
+        <UnitSelect label="Repeat unit" value={unit} onChange={setUnit} />
+      </div>
+      <p className="sub">Blank for no repeat.</p>
       <div className="task-actions">
         <button type="submit">Save changes</button>
         <button type="button" className="link" onClick={onClose}>
@@ -187,6 +205,7 @@ export function AddTask({
   const [category, setCategory] = useState(categories[0] ?? "House");
   const [notes, setNotes] = useState("");
   const [repeat, setRepeat] = useState("");
+  const [unit, setUnit] = useState<RepeatUnit>("month");
   const [rooms, setRooms] = useState("");
 
   if (!open) {
@@ -201,16 +220,17 @@ export function AddTask({
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    const months = parseMonths(repeat);
-    if (months === undefined) return onError("Repeat must be a whole number of months, or blank.");
+    const every = parseRepeat(repeat);
+    if (every === undefined) return onError(REPEAT_ERROR);
     if (!name.trim() || !category.trim()) return onError("A task needs a name and a category.");
     const items = [...new Set(rooms.split("\n").map((r) => r.trim()).filter(Boolean))];
-    const body = { name: name.trim(), category: category.trim(), notes, interval_months: months, items };
+    const body = { name: name.trim(), category: category.trim(), notes, repeat_every: every, repeat_unit: unit, items };
     if (await act("POST", "/api/maintenance", body)) {
       setOpen(false);
       setName("");
       setNotes("");
       setRepeat("");
+      setUnit("month");
       setRooms("");
     }
   };
@@ -239,10 +259,14 @@ export function AddTask({
         Notes
         <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
       </label>
-      <label>
-        New task repeat (months, blank for no repeat)
-        <input type="number" min={1} value={repeat} onChange={(e) => setRepeat(e.target.value)} />
-      </label>
+      <div className="repeat">
+        <label>
+          New task repeat
+          <input type="number" min={1} value={repeat} onChange={(e) => setRepeat(e.target.value)} />
+        </label>
+        <UnitSelect label="New task repeat unit" value={unit} onChange={setUnit} />
+      </div>
+      <p className="sub">Blank for no repeat.</p>
       <label>
         Rooms, one per line (optional)
         <textarea rows={3} value={rooms} onChange={(e) => setRooms(e.target.value)} />

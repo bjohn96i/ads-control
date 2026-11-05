@@ -38,12 +38,15 @@ export async function getJson<T>(path: string): Promise<T> {
 
 export type MaintenanceItem = { id: number; name: string; last_done: string | null };
 
+export type RepeatUnit = "day" | "week" | "month";
+
 export type MaintenanceTask = {
   id: number;
   name: string;
   category: string;
   notes: string;
-  interval_months: number | null;
+  repeat_every: number | null;
+  repeat_unit: RepeatUnit;
   items: MaintenanceItem[];
   last_done: string | null;
   next_due: string | null;

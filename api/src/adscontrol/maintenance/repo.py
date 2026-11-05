@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from adscontrol.maintenance.dates import Done, format_rough, next_due
+from adscontrol.maintenance.dates import Done, Unit, format_rough, next_due
 
 
 class DoneIn(BaseModel):
@@ -22,9 +22,18 @@ class TaskIn(BaseModel):
     name: str = Field(min_length=1)
     category: str = Field(min_length=1)
     notes: str = ""
-    interval_months: int | None = Field(default=None, gt=0)
+    repeat_every: int | None = Field(default=None, gt=0)
+    repeat_unit: Unit = "month"
     items: list[str] = []
     done: list[DoneIn] = []
+
+    @model_validator(mode="before")
+    @classmethod
+    def months_from_older_files(cls, data: dict) -> dict:
+        # Backups and the seed file from before repeat units say interval_months.
+        if isinstance(data, dict) and "interval_months" in data and "repeat_every" not in data:
+            data = {**data, "repeat_every": data["interval_months"], "repeat_unit": "month"}
+        return data
 
 
 class ImportIn(BaseModel):
@@ -44,7 +53,8 @@ class TaskView:
     name: str
     category: str
     notes: str
-    interval_months: int | None
+    repeat_every: int | None
+    repeat_unit: Unit
     items: list[ItemView]
     last_done: str | None
     next_due: date | None
@@ -88,8 +98,8 @@ async def import_tasks(session: AsyncSession, raw: dict) -> dict[str, int]:
         inserted = await session.scalar(
             text(
                 """
-                INSERT INTO tasks (name, category, notes, interval_months)
-                VALUES (:name, :category, :notes, :interval_months)
+                INSERT INTO tasks (name, category, notes, repeat_every, repeat_unit)
+                VALUES (:name, :category, :notes, :repeat_every, :repeat_unit)
                 ON CONFLICT (name) DO NOTHING RETURNING id
                 """
             ),
@@ -97,7 +107,8 @@ async def import_tasks(session: AsyncSession, raw: dict) -> dict[str, int]:
                 name=task.name,
                 category=task.category,
                 notes=task.notes,
-                interval_months=task.interval_months,
+                repeat_every=task.repeat_every,
+                repeat_unit=task.repeat_unit,
             ),
         )
         counts["tasks"] += inserted is not None
@@ -131,7 +142,9 @@ async def import_tasks(session: AsyncSession, raw: dict) -> dict[str, int]:
 async def list_tasks(session: AsyncSession) -> list[TaskView]:
     tasks = (
         await session.execute(
-            text("SELECT id, name, category, notes, interval_months FROM tasks ORDER BY id")
+            text(
+                "SELECT id, name, category, notes, repeat_every, repeat_unit FROM tasks ORDER BY id"
+            )
         )
     ).all()
     items = (
@@ -166,11 +179,13 @@ async def list_tasks(session: AsyncSession) -> list[TaskView]:
                 name=task.name,
                 category=task.category,
                 notes=task.notes,
-                interval_months=task.interval_months,
+                repeat_every=task.repeat_every,
+                repeat_unit=task.repeat_unit,
                 items=item_views,
                 last_done=format_rough(last.done_on, last.precision) if last else None,
                 next_due=next_due(
-                    task.interval_months,
+                    task.repeat_every,
+                    task.repeat_unit,
                     [i.id for i in own_items],
                     [Done(d.done_on, d.item_id) for d in own_done],
                 ),

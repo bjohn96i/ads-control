@@ -175,11 +175,34 @@ async def test_next_item_for_home_strip(api):
 async def test_patch_sets_and_clears_interval(api):
     driveway = await _task(api, "Driveway")
     url = f"/api/maintenance/{driveway['id']}"
-    assert (await api.patch(url, json={"interval_months": 12}, headers=HEADERS)).status_code == 200
-    assert (await _task(api, "Driveway"))["interval_months"] == 12
-    await api.patch(url, json={"interval_months": None}, headers=HEADERS)
-    assert (await _task(api, "Driveway"))["interval_months"] is None
-    assert (await api.patch(url, json={"interval_months": 0}, headers=HEADERS)).status_code == 422
+    assert (await api.patch(url, json={"repeat_every": 12}, headers=HEADERS)).status_code == 200
+    assert (await _task(api, "Driveway"))["repeat_every"] == 12
+    await api.patch(url, json={"repeat_every": None}, headers=HEADERS)
+    assert (await _task(api, "Driveway"))["repeat_every"] is None
+    assert (await api.patch(url, json={"repeat_every": 0}, headers=HEADERS)).status_code == 422
+
+
+async def test_patch_changes_the_repeat_unit(api):
+    fridge = await _task(api, "Fridge")
+    url = f"/api/maintenance/{fridge['id']}"
+    assert fridge["repeat_unit"] == "month"  # imported from interval_months
+    assert (await api.patch(url, json={"repeat_unit": "week"}, headers=HEADERS)).status_code == 200
+    fridge = await _task(api, "Fridge")
+    assert (fridge["repeat_every"], fridge["repeat_unit"]) == (6, "week")
+    assert fridge["next_due"] == "2026-07-13"  # six weeks after Jun 1
+    for bad in (None, "year"):
+        assert (await api.patch(url, json={"repeat_unit": bad}, headers=HEADERS)).status_code == 422
+
+
+async def test_a_task_can_repeat_every_few_days(api):
+    body = {"name": "Water plants", "category": "House", "repeat_every": 3, "repeat_unit": "day"}
+    task_id = (await api.post("/api/maintenance", json=body, headers=HEADERS)).json()["id"]
+    await api.post(
+        f"/api/maintenance/{task_id}/complete", json={"done_on": "2026-10-28"}, headers=HEADERS
+    )
+    task = await _task(api, "Water plants")
+    assert task["next_due"] == "2026-10-31"
+    assert task["overdue"] is True  # today is Nov 2 here
 
 
 async def test_export_import_round_trip(api, session):
@@ -192,6 +215,10 @@ async def test_export_import_round_trip(api, session):
             "done_on": str(date(2026, 11, 1)),
         },
         headers=HEADERS,
+    )
+    fridge = await _task(api, "Fridge")
+    await api.patch(
+        f"/api/maintenance/{fridge['id']}", json={"repeat_unit": "week"}, headers=HEADERS
     )
     exported = (await api.get("/api/maintenance/export")).json()
     before = (await api.get("/api/maintenance")).json()
@@ -240,7 +267,7 @@ async def test_add_task_with_rooms(api):
             "name": "  Dryer Vent ",
             "category": "House",
             "notes": "Back wall",
-            "interval_months": 12,
+            "repeat_every": 12,
             "items": ["Laundry", "Roof"],
         },
         headers=HEADERS,
@@ -258,7 +285,8 @@ async def test_add_task_with_rooms(api):
     [
         {"name": "   ", "category": "House"},
         {"name": "X", "category": ""},
-        {"name": "X", "category": "House", "interval_months": 0},
+        {"name": "X", "category": "House", "repeat_every": 0},
+        {"name": "X", "category": "House", "repeat_every": 2, "repeat_unit": "fortnight"},
         {"name": "X", "category": "House", "items": ["  "]},
         {"name": "X", "category": "House", "items": ["A", "A"]},
         {"name": "X" * 121, "category": "House"},

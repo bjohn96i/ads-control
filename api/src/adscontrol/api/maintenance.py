@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, StringConstraints, ValidationError, model
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from adscontrol.maintenance.dates import Unit
 from adscontrol.maintenance.repo import add_completions, import_tasks, list_tasks
 from adscontrol.rates import LOCAL
 
@@ -35,7 +36,8 @@ class TaskCreate(BaseModel):
     name: Name
     category: Name
     notes: str = ""
-    interval_months: int | None = Field(default=None, gt=0)
+    repeat_every: int | None = Field(default=None, gt=0)
+    repeat_unit: Unit = "month"
     items: list[Name] = []
 
     @model_validator(mode="after")
@@ -49,13 +51,14 @@ class PatchIn(BaseModel):
     name: Name = None  # type: ignore[assignment]  # optional, but never null
     category: Name = None  # type: ignore[assignment]
     notes: str = None  # type: ignore[assignment]
-    interval_months: int | None = Field(default=None, gt=0)
+    repeat_every: int | None = Field(default=None, gt=0)
+    repeat_unit: Unit = None  # type: ignore[assignment]
 
     @model_validator(mode="before")
     @classmethod
-    def only_interval_can_be_null(cls, data: dict) -> dict:
-        if any(data.get(k, "") is None for k in ("name", "category", "notes")):
-            raise ValueError("name, category and notes cannot be null")
+    def only_repeat_every_can_be_null(cls, data: dict) -> dict:
+        if any(data.get(k, "") is None for k in ("name", "category", "notes", "repeat_unit")):
+            raise ValueError("only repeat_every can be null")
         return data
 
 
@@ -77,7 +80,8 @@ async def _sorted_tasks(request: Request) -> list[dict]:
             "name": t.name,
             "category": t.category,
             "notes": t.notes,
-            "interval_months": t.interval_months,
+            "repeat_every": t.repeat_every,
+            "repeat_unit": t.repeat_unit,
             "items": [vars(i) for i in t.items],
             "last_done": t.last_done,
             "next_due": t.next_due,
@@ -138,8 +142,8 @@ async def create_task(body: TaskCreate, request: Request) -> dict:
             task_id = await session.scalar(
                 text(
                     """
-                    INSERT INTO tasks (name, category, notes, interval_months)
-                    VALUES (:name, :category, :notes, :interval_months) RETURNING id
+                    INSERT INTO tasks (name, category, notes, repeat_every, repeat_unit)
+                    VALUES (:name, :category, :notes, :repeat_every, :repeat_unit) RETURNING id
                     """
                 ),
                 body.model_dump(exclude={"items"}),
@@ -237,7 +241,8 @@ async def export(request: Request) -> dict:
                 "name": t.name,
                 "category": t.category,
                 "notes": t.notes,
-                "interval_months": t.interval_months,
+                "repeat_every": t.repeat_every,
+                "repeat_unit": t.repeat_unit,
                 "items": [i.name for i in items if i.task_id == t.id],
                 "done": [
                     {
