@@ -4,3 +4,9 @@ https://192.168.4.227, https://control.home.arpa {
 	tls internal
 	reverse_proxy localhost:8100
 }
+
+# Lurk (its own Compose stack in /opt/lurk on this host, port 3100). Shares this Caddy because it owns 80/443.
+lurk.home.arpa {
+	tls internal
+	reverse_proxy localhost:3100
+}
